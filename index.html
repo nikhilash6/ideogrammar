@@ -1,0 +1,964 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ideogram 4 Prompt Editor</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #161b22;
+    --panel-2: #1c2330;
+    --border: #2d3748;
+    --text: #e6edf3;
+    --muted: #8b949e;
+    --accent: #4A90E2;
+    --accent-2: #7ED321;
+    --danger: #D0021B;
+    --radius: 8px;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 14px;
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    overflow: hidden;
+  }
+  header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 16px;
+    background: var(--panel);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  header h1 { font-size: 16px; margin: 0; font-weight: 600; }
+  header .badge {
+    font-size: 11px; color: var(--muted); padding: 2px 8px;
+    border: 1px solid var(--border); border-radius: 20px;
+  }
+  header .spacer { flex: 1; }
+  .layout { flex: 1; display: grid; grid-template-columns: 360px 1fr 420px; min-height: 0; }
+  .col { overflow-y: auto; padding: 16px; }
+  .col.canvas-col {
+    background: var(--panel-2);
+    border-left: 1px solid var(--border);
+    border-right: 1px solid var(--border);
+    display: flex; flex-direction: column; align-items: center;
+    gap: 12px;
+  }
+  .col.json-col { background: var(--panel); }
+
+  h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 0 0 8px; }
+  .section { margin-bottom: 20px; }
+  label { display: block; font-size: 11px; color: var(--muted); margin: 8px 0 3px; }
+  input[type="text"], input[type="number"], textarea, select {
+    width: 100%; background: var(--bg); color: var(--text);
+    border: 1px solid var(--border); border-radius: 6px;
+    padding: 7px 9px; font-size: 13px; font-family: inherit; resize: vertical;
+  }
+  textarea { line-height: 1.4; }
+  input:focus, textarea:focus, select:focus { outline: none; border-color: var(--accent); }
+
+  button {
+    background: var(--panel-2); color: var(--text); border: 1px solid var(--border);
+    border-radius: 6px; padding: 7px 12px; font-size: 13px; cursor: pointer;
+    font-family: inherit; transition: background .12s, border-color .12s;
+  }
+  button:hover { background: #232c3d; border-color: #3d4a5e; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button.primary:hover { background: #3b7bc8; }
+  button.ghost { background: transparent; }
+  button.danger { color: var(--danger); border-color: transparent; background: transparent; padding: 4px 6px; }
+  button.danger:hover { background: rgba(208,2,27,.12); }
+  .btn-row { display: flex; gap: 8px; flex-wrap: wrap; }
+
+  /* color palette editor */
+  .palette { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 4px; }
+  .swatch { position: relative; width: 30px; height: 30px; border-radius: 6px; border: 1px solid var(--border); cursor: pointer; overflow: hidden; }
+  .swatch input[type="color"] { position: absolute; inset: -4px; width: 140%; height: 140%; border: none; padding: 0; cursor: pointer; background: none; }
+  .swatch .x { position: absolute; top: -2px; right: 0px; font-size: 14px; color: #fff; text-shadow: 0 0 3px #000; display: none; line-height: 1; }
+  .swatch:hover .x { display: block; }
+  .add-swatch { width: 30px; height: 30px; border-radius: 6px; border: 1px dashed var(--border); background: transparent; color: var(--muted); font-size: 18px; line-height: 1; padding: 0; display: flex; align-items: center; justify-content: center; }
+
+  /* element cards */
+  .element {
+    border: 1px solid var(--border); border-radius: var(--radius);
+    margin-bottom: 10px; background: var(--panel);
+  }
+  .element.selected { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+  .element-head {
+    display: flex; align-items: center; gap: 8px; padding: 8px 10px; cursor: pointer;
+    user-select: none;
+  }
+  .element-head .dot { width: 10px; height: 10px; border-radius: 3px; flex-shrink: 0; }
+  .element-head .title { flex: 1; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .element-head .idx { font-size: 11px; color: var(--muted); }
+  .element-body { padding: 0 10px 10px; border-top: 1px solid var(--border); }
+  .element-body.collapsed { display: none; }
+  .bbox-grid { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 6px; }
+  .bbox-grid > div label { margin-top: 4px; }
+  .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+
+  /* canvas */
+  .canvas-wrap { position: relative; width: 100%; max-width: 560px; aspect-ratio: 1/1; background: #fff; border-radius: 6px; overflow: hidden; box-shadow: 0 6px 24px rgba(0,0,0,.4); flex-shrink: 0; }
+  #stage { position: absolute; inset: 0; }
+  .box {
+    position: absolute; border: 2px solid var(--accent); background: rgba(74,144,226,.12);
+    cursor: move; font-size: 11px; color: #fff; overflow: visible;
+  }
+  .box .lbl { position: absolute; top: 0; left: 0; background: var(--accent); padding: 1px 5px; font-size: 10px; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; border-radius: 0 0 4px 0; pointer-events: none; }
+  .box.selected { border-width: 2px; z-index: 50; box-shadow: 0 0 0 2px rgba(255,255,255,.5); }
+  .handle { position: absolute; width: 10px; height: 10px; background: #fff; border: 1.5px solid var(--accent); border-radius: 2px; }
+  .handle.se { right: -6px; bottom: -6px; cursor: nwse-resize; }
+  .canvas-meta { font-size: 11px; color: var(--muted); text-align: center; }
+  .grid-line { position: absolute; background: rgba(0,0,0,.06); }
+
+  /* json */
+  .json-toolbar { display: flex; gap: 6px; margin-bottom: 10px; flex-wrap: wrap; }
+  pre#json {
+    background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+    padding: 12px; font-size: 12px; line-height: 1.5; overflow: auto; margin: 0;
+    font-family: "SF Mono", "Fira Code", Consolas, monospace; white-space: pre; max-height: calc(100vh - 160px);
+  }
+  .tok-key { color: #79c0ff; }
+  .tok-str { color: #a5d6ff; }
+  .tok-num { color: #f0883e; }
+  .tok-punct { color: var(--muted); }
+  .hint { font-size: 11px; color: var(--muted); margin-top: 4px; line-height: 1.4; }
+  .toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: var(--accent-2); color: #06210a; padding: 8px 16px; border-radius: 20px; font-size: 13px; font-weight: 600; opacity: 0; transition: opacity .2s; pointer-events: none; }
+  .toast.show { opacity: 1; }
+  input[type=file] { display: none; }
+  .col::-webkit-scrollbar, pre::-webkit-scrollbar { width: 10px; height: 10px; }
+  .col::-webkit-scrollbar-thumb, pre::-webkit-scrollbar-thumb { background: #2d3748; border-radius: 6px; }
+
+  /* modal */
+  .overlay { position: fixed; inset: 0; background: rgba(0,0,0,.6); display: none; align-items: center; justify-content: center; z-index: 100; padding: 20px; }
+  .overlay.show { display: flex; }
+  .modal { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; width: 100%; max-width: 640px; max-height: 90vh; overflow-y: auto; box-shadow: 0 20px 60px rgba(0,0,0,.5); }
+  .modal-head { display: flex; align-items: center; padding: 16px 20px; border-bottom: 1px solid var(--border); }
+  .modal-head h2 { margin: 0; font-size: 15px; text-transform: none; letter-spacing: 0; color: var(--text); flex: 1; }
+  .modal-head .close { background: transparent; border: none; color: var(--muted); font-size: 22px; padding: 0 6px; }
+  .modal-body { padding: 20px; }
+  .modal-foot { padding: 14px 20px; border-top: 1px solid var(--border); display: flex; align-items: center; gap: 10px; }
+  details.cfg { border: 1px solid var(--border); border-radius: 8px; padding: 0 12px; margin-bottom: 16px; background: var(--panel-2); }
+  details.cfg summary { cursor: pointer; padding: 10px 0; font-size: 13px; color: var(--text); user-select: none; }
+  details.cfg[open] summary { border-bottom: 1px solid var(--border); margin-bottom: 10px; }
+  .cfg-inner { padding-bottom: 12px; }
+  .status { font-size: 12px; color: var(--muted); flex: 1; }
+  .status.err { color: var(--danger); }
+  .status.ok { color: var(--accent-2); }
+  .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 7px; overflow: hidden; }
+  .seg button { border: none; border-radius: 0; padding: 6px 14px; background: var(--bg); }
+  .seg button.active { background: var(--accent); color: #fff; }
+  .spinner { width: 14px; height: 14px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; display: inline-block; animation: spin .7s linear infinite; vertical-align: middle; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+<header>
+  <h1>Ideogram 4 Prompt Editor</h1>
+  <span class="badge">1000 × 1000 bbox space</span>
+  <div class="spacer"></div>
+  <div class="btn-row">
+    <button class="primary" id="generateBtn">✨ Generate from text</button>
+    <button id="importBtn">Import JSON</button>
+    <button id="resetBtn">Reset</button>
+    <button id="copyBtn">Copy JSON</button>
+    <button id="downloadBtn">Download</button>
+  </div>
+  <input type="file" id="fileInput" accept=".json,application/json">
+</header>
+
+<div class="layout">
+  <!-- LEFT: form -->
+  <div class="col" id="formCol">
+    <div class="section">
+      <h2>High level description</h2>
+      <textarea id="hld" rows="3" placeholder="One-sentence description of the whole image…"></textarea>
+    </div>
+
+    <div class="section">
+      <h2>Style description</h2>
+      <label>Aesthetics</label>
+      <textarea id="st-aesthetics" rows="2"></textarea>
+      <label>Lighting</label>
+      <textarea id="st-lighting" rows="2"></textarea>
+      <label>Photo</label>
+      <input type="text" id="st-photo">
+      <label>Medium</label>
+      <input type="text" id="st-medium">
+      <label>Color palette</label>
+      <div class="palette" id="st-palette"></div>
+    </div>
+
+    <div class="section">
+      <h2>Background</h2>
+      <textarea id="bg" rows="3"></textarea>
+    </div>
+
+    <div class="section">
+      <div style="display:flex;align-items:center;gap:8px;">
+        <h2 style="margin:0;flex:1;">Elements (<span id="elCount">0</span>)</h2>
+        <button class="primary" id="addEl">+ Add object</button>
+      </div>
+      <div class="hint">Click an element header to expand. Drag boxes on the canvas to position them.</div>
+      <div id="elements" style="margin-top:10px;"></div>
+    </div>
+  </div>
+
+  <!-- MIDDLE: canvas -->
+  <div class="col canvas-col">
+    <h2 style="align-self:flex-start;">Layout preview</h2>
+    <div class="canvas-wrap">
+      <div id="stage"></div>
+    </div>
+    <div class="canvas-meta">
+      Origin top-left · X,Y → right,down · 0–1000 each axis.<br>
+      Drag a box to move · drag the corner handle to resize · click to select.
+    </div>
+    <div class="btn-row">
+      <label style="display:flex;align-items:center;gap:6px;margin:0;color:var(--text);font-size:12px;cursor:pointer;">
+        <input type="checkbox" id="gridToggle" checked style="width:auto;"> Show grid
+      </label>
+      <label style="display:flex;align-items:center;gap:6px;margin:0;color:var(--text);font-size:12px;cursor:pointer;">
+        <input type="checkbox" id="labelToggle" checked style="width:auto;"> Show labels
+      </label>
+    </div>
+  </div>
+
+  <!-- RIGHT: json -->
+  <div class="col json-col">
+    <h2>JSON output</h2>
+    <div class="json-toolbar">
+      <button id="copyBtn2" class="primary">Copy</button>
+      <button id="downloadBtn2">Download .json</button>
+    </div>
+    <pre id="json"></pre>
+  </div>
+</div>
+
+<!-- GENERATE MODAL -->
+<div class="overlay" id="genOverlay">
+  <div class="modal">
+    <div class="modal-head">
+      <h2>✨ Generate a setup from a description</h2>
+      <button class="close" id="genClose">×</button>
+    </div>
+    <div class="modal-body">
+      <details class="cfg" id="cfg">
+        <summary>⚙️ Model provider settings</summary>
+        <div class="cfg-inner">
+          <label>Provider</label>
+          <div class="seg" id="providerSeg">
+            <button type="button" data-p="openrouter">OpenRouter</button>
+            <button type="button" data-p="local">Local (llama.cpp)</button>
+          </div>
+          <label>Base URL <span style="color:var(--muted)">(OpenAI-compatible, ends in /v1)</span></label>
+          <input type="text" id="cfgBaseUrl" placeholder="https://openrouter.ai/api/v1">
+          <label>API key <span style="color:var(--muted)">(required for OpenRouter; usually blank for local)</span></label>
+          <input type="text" id="cfgApiKey" placeholder="sk-or-..." autocomplete="off">
+          <label>Model</label>
+          <input type="text" id="cfgModel" placeholder="anthropic/claude-3.5-sonnet">
+          <div class="hint">Settings are saved in this browser only (localStorage). For local <code>llama-server</code>, run it with <code>--port 8081</code> and start it with CORS enabled; base URL is then <code>http://&lt;host&gt;:8081/v1</code>.</div>
+        </div>
+      </details>
+
+      <label>Describe the image you want</label>
+      <textarea id="genPrompt" rows="5" placeholder="e.g. A bold 80s synthwave concert poster for a band called NEON TIDE, with a retro sports car driving toward a setting sun, palm trees, and a grid floor. Big chrome title at the top, tour dates at the bottom."></textarea>
+      <div class="hint">The model returns the full schema (style, background, and positioned objects). You can edit everything afterwards.</div>
+    </div>
+    <div class="modal-foot">
+      <span class="status" id="genStatus"></span>
+      <button id="genCancel">Cancel</button>
+      <button class="primary" id="genRun">Generate</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+"use strict";
+
+/* ------------------------------------------------------------------ */
+/*  State                                                             */
+/* ------------------------------------------------------------------ */
+const COORD = 1000; // bbox coordinate space
+let uid = 1;
+
+function emptyElement(seed = {}) {
+  return {
+    _id: uid++,
+    type: seed.type ?? "obj",
+    bbox: seed.bbox ?? [100, 100, 500, 500],
+    desc: seed.desc ?? "",
+    color_palette: seed.color_palette ?? ["#FFFFFF"],
+    _collapsed: false
+  };
+}
+
+function defaultState() {
+  return {
+    high_level_description: "A clean, minimalist product poster with a single central subject and a bold title.",
+    style_description: {
+      aesthetics: "clean minimalist studio aesthetic, generous negative space, modern editorial layout",
+      lighting: "soft, even studio lighting with gentle, diffused shadows",
+      photo: "high-resolution product photography, 50mm lens, shallow depth of field",
+      medium: "digital photography",
+      color_palette: ["#F5F5F5", "#1A1A1A", "#4A90E2"]
+    },
+    background: "A smooth, seamless light-grey studio backdrop with a subtle top-to-bottom gradient.",
+    elements: [
+      emptyElement({ type: "subject", bbox: [320, 300, 680, 760], desc: "The main product, centered in the frame and sharply in focus.", color_palette: ["#4A90E2", "#FFFFFF"] }),
+      emptyElement({ type: "text", bbox: [200, 90, 800, 210], desc: "Bold sans-serif title text near the top reading 'YOUR TITLE HERE'.", color_palette: ["#1A1A1A"] })
+    ]
+  };
+}
+
+let state = defaultState();
+let selectedId = null;
+
+/* ------------------------------------------------------------------ */
+/*  Element box colors (cycled for the canvas)                        */
+/* ------------------------------------------------------------------ */
+const BOX_COLORS = ["#4A90E2", "#D0021B", "#7ED321", "#F5A623", "#BD10E0", "#50E3C2", "#B8E986", "#FF007F", "#9013FE", "#417505"];
+function boxColor(i) { return BOX_COLORS[i % BOX_COLORS.length]; }
+
+/* ------------------------------------------------------------------ */
+/*  Rendering                                                         */
+/* ------------------------------------------------------------------ */
+const $ = (id) => document.getElementById(id);
+
+function render() {
+  renderForm();
+  renderElements();
+  renderCanvas();
+  renderJSON();
+}
+
+function renderForm() {
+  $("hld").value = state.high_level_description;
+  $("st-aesthetics").value = state.style_description.aesthetics;
+  $("st-lighting").value = state.style_description.lighting;
+  $("st-photo").value = state.style_description.photo;
+  $("st-medium").value = state.style_description.medium;
+  $("bg").value = state.background;
+  renderPalette($("st-palette"), state.style_description.color_palette);
+  $("elCount").textContent = state.elements.length;
+}
+
+/* Palette editor — reusable */
+function renderPalette(container, arr) {
+  container.innerHTML = "";
+  arr.forEach((color, i) => {
+    const sw = document.createElement("label");
+    sw.className = "swatch";
+    sw.style.background = color;
+    const inp = document.createElement("input");
+    inp.type = "color";
+    inp.value = normalizeHex(color);
+    inp.addEventListener("input", () => { arr[i] = inp.value.toUpperCase(); sw.style.background = inp.value; renderCanvas(); renderJSON(); });
+    const x = document.createElement("span");
+    x.className = "x";
+    x.textContent = "×";
+    x.title = "Remove color";
+    x.addEventListener("click", (e) => { e.preventDefault(); e.stopPropagation(); arr.splice(i, 1); render(); });
+    sw.appendChild(inp); sw.appendChild(x);
+    container.appendChild(sw);
+  });
+  const add = document.createElement("button");
+  add.className = "add-swatch";
+  add.type = "button";
+  add.textContent = "+";
+  add.title = "Add color";
+  add.addEventListener("click", () => { arr.push("#FFFFFF"); render(); });
+  container.appendChild(add);
+}
+
+function normalizeHex(c) {
+  if (typeof c !== "string") return "#000000";
+  c = c.trim();
+  if (/^#[0-9a-fA-F]{6}$/.test(c)) return c;
+  if (/^#[0-9a-fA-F]{3}$/.test(c)) return "#" + c.slice(1).split("").map(ch => ch + ch).join("");
+  return "#000000";
+}
+
+function renderElements() {
+  const wrap = $("elements");
+  wrap.innerHTML = "";
+  state.elements.forEach((el, i) => {
+    const card = document.createElement("div");
+    card.className = "element" + (el._id === selectedId ? " selected" : "");
+
+    const head = document.createElement("div");
+    head.className = "element-head";
+    head.innerHTML = `
+      <span class="dot" style="background:${boxColor(i)}"></span>
+      <span class="idx">#${i + 1}</span>
+      <span class="title">${escapeHtml(el.desc) || "<em style='color:var(--muted)'>empty object</em>"}</span>
+    `;
+    const del = document.createElement("button");
+    del.className = "danger";
+    del.textContent = "Delete";
+    del.title = "Remove element";
+    del.addEventListener("click", (e) => { e.stopPropagation(); removeElement(el._id); });
+    head.appendChild(del);
+    head.addEventListener("click", () => { el._collapsed = !el._collapsed; selectedId = el._id; render(); });
+    card.appendChild(head);
+
+    const body = document.createElement("div");
+    body.className = "element-body" + (el._collapsed ? " collapsed" : "");
+
+    // type
+    const typeRow = document.createElement("div");
+    typeRow.className = "row2";
+    typeRow.innerHTML = `<div><label>Type</label></div><div></div>`;
+    const typeSel = document.createElement("select");
+    ["obj", "text", "bg", "subject", "logo"].forEach(t => {
+      const o = document.createElement("option"); o.value = t; o.textContent = t;
+      if (t === el.type) o.selected = true; typeSel.appendChild(o);
+    });
+    // allow custom
+    if (!["obj", "text", "bg", "subject", "logo"].includes(el.type)) {
+      const o = document.createElement("option"); o.value = el.type; o.textContent = el.type; o.selected = true; typeSel.appendChild(o);
+    }
+    typeSel.addEventListener("change", () => { el.type = typeSel.value; renderJSON(); });
+    typeRow.children[0].appendChild(typeSel);
+    body.appendChild(typeRow);
+
+    // desc
+    const descLabel = document.createElement("label"); descLabel.textContent = "Description";
+    body.appendChild(descLabel);
+    const desc = document.createElement("textarea");
+    desc.rows = 3; desc.value = el.desc;
+    desc.addEventListener("input", () => { el.desc = desc.value; renderElementTitle(card, el); renderCanvas(); renderJSON(); });
+    body.appendChild(desc);
+
+    // bbox
+    const bboxLabel = document.createElement("label"); bboxLabel.textContent = "Bounding box  [x1, y1, x2, y2]  (0–1000)";
+    body.appendChild(bboxLabel);
+    const grid = document.createElement("div");
+    grid.className = "bbox-grid";
+    ["x1", "y1", "x2", "y2"].forEach((name, k) => {
+      const cell = document.createElement("div");
+      const l = document.createElement("label"); l.textContent = name; l.style.marginTop = "0";
+      const inp = document.createElement("input");
+      inp.type = "number"; inp.min = 0; inp.max = COORD; inp.value = el.bbox[k];
+      inp.addEventListener("input", () => {
+        let v = clamp(parseInt(inp.value || "0", 10), 0, COORD);
+        el.bbox[k] = v; renderCanvas(); renderJSON();
+      });
+      cell.appendChild(l); cell.appendChild(inp);
+      grid.appendChild(cell);
+    });
+    body.appendChild(grid);
+
+    // palette
+    const palLabel = document.createElement("label"); palLabel.textContent = "Color palette";
+    body.appendChild(palLabel);
+    const pal = document.createElement("div");
+    pal.className = "palette";
+    renderPalette(pal, el.color_palette);
+    body.appendChild(pal);
+
+    card.appendChild(body);
+    wrap.appendChild(card);
+  });
+}
+
+function renderElementTitle(card, el) {
+  const t = card.querySelector(".title");
+  if (t) t.innerHTML = escapeHtml(el.desc) || "<em style='color:var(--muted)'>empty object</em>";
+}
+
+/* ------------------------------------------------------------------ */
+/*  Canvas with draggable / resizable boxes                          */
+/* ------------------------------------------------------------------ */
+function renderCanvas() {
+  const stage = $("stage");
+  stage.innerHTML = "";
+  const showGrid = $("gridToggle").checked;
+  const showLabels = $("labelToggle").checked;
+
+  if (showGrid) {
+    for (let p = 10; p < 100; p += 10) {
+      const v = document.createElement("div");
+      v.className = "grid-line"; v.style.left = p + "%"; v.style.top = 0; v.style.width = "1px"; v.style.height = "100%";
+      stage.appendChild(v);
+      const h = document.createElement("div");
+      h.className = "grid-line"; h.style.top = p + "%"; h.style.left = 0; h.style.height = "1px"; h.style.width = "100%";
+      stage.appendChild(h);
+    }
+  }
+
+  state.elements.forEach((el, i) => {
+    const [x1, y1, x2, y2] = el.bbox;
+    const left = Math.min(x1, x2), top = Math.min(y1, y2);
+    const w = Math.abs(x2 - x1), h = Math.abs(y2 - y1);
+    const box = document.createElement("div");
+    box.className = "box" + (el._id === selectedId ? " selected" : "");
+    box.style.left = (left / COORD * 100) + "%";
+    box.style.top = (top / COORD * 100) + "%";
+    box.style.width = (w / COORD * 100) + "%";
+    box.style.height = (h / COORD * 100) + "%";
+    const col = boxColor(i);
+    box.style.borderColor = col;
+    box.style.background = hexToRgba(col, 0.12);
+
+    if (showLabels) {
+      const lbl = document.createElement("div");
+      lbl.className = "lbl"; lbl.style.background = col;
+      lbl.textContent = `#${i + 1} ${shortDesc(el.desc)}`;
+      box.appendChild(lbl);
+    }
+
+    const handle = document.createElement("div");
+    handle.className = "handle se";
+    handle.style.borderColor = col;
+    box.appendChild(handle);
+
+    box.addEventListener("mousedown", (e) => startDrag(e, el, "move"));
+    handle.addEventListener("mousedown", (e) => { e.stopPropagation(); startDrag(e, el, "resize"); });
+    box.addEventListener("click", (e) => { e.stopPropagation(); selectElement(el._id); });
+
+    stage.appendChild(box);
+  });
+}
+
+let drag = null;
+function startDrag(e, el, mode) {
+  e.preventDefault();
+  selectElement(el._id);
+  const stage = $("stage");
+  const rect = stage.getBoundingClientRect();
+  drag = {
+    el, mode, rect,
+    startX: e.clientX, startY: e.clientY,
+    orig: el.bbox.slice()
+  };
+  window.addEventListener("mousemove", onDrag);
+  window.addEventListener("mouseup", endDrag);
+}
+
+function onDrag(e) {
+  if (!drag) return;
+  const { el, mode, rect, orig } = drag;
+  const dx = (e.clientX - drag.startX) / rect.width * COORD;
+  const dy = (e.clientY - drag.startY) / rect.height * COORD;
+  let [x1, y1, x2, y2] = orig;
+  // normalize so x1<x2, y1<y2 first
+  let nx1 = Math.min(x1, x2), nx2 = Math.max(x1, x2);
+  let ny1 = Math.min(y1, y2), ny2 = Math.max(y1, y2);
+  if (mode === "move") {
+    const w = nx2 - nx1, h = ny2 - ny1;
+    nx1 = clamp(nx1 + dx, 0, COORD - w);
+    ny1 = clamp(ny1 + dy, 0, COORD - h);
+    nx2 = nx1 + w; ny2 = ny1 + h;
+  } else {
+    nx2 = clamp(nx2 + dx, nx1 + 5, COORD);
+    ny2 = clamp(ny2 + dy, ny1 + 5, COORD);
+  }
+  el.bbox = [Math.round(nx1), Math.round(ny1), Math.round(nx2), Math.round(ny2)];
+  renderCanvas(); renderJSONThrottled();
+  syncBboxInputs(el);
+}
+
+function endDrag() {
+  drag = null;
+  window.removeEventListener("mousemove", onDrag);
+  window.removeEventListener("mouseup", endDrag);
+  renderJSON();
+  renderElements();
+}
+
+function syncBboxInputs(el) {
+  // update the number inputs for the dragged element live, if expanded
+  const cards = document.querySelectorAll(".element");
+  const idx = state.elements.indexOf(el);
+  const card = cards[idx];
+  if (!card) return;
+  const inputs = card.querySelectorAll(".bbox-grid input");
+  if (inputs.length === 4) el.bbox.forEach((v, k) => { if (document.activeElement !== inputs[k]) inputs[k].value = v; });
+}
+
+function selectElement(id) {
+  selectedId = id;
+  renderCanvas();
+  renderElements();
+}
+
+/* ------------------------------------------------------------------ */
+/*  JSON output                                                       */
+/* ------------------------------------------------------------------ */
+function buildJSON() {
+  return {
+    high_level_description: state.high_level_description,
+    style_description: {
+      aesthetics: state.style_description.aesthetics,
+      lighting: state.style_description.lighting,
+      photo: state.style_description.photo,
+      medium: state.style_description.medium,
+      color_palette: state.style_description.color_palette.slice()
+    },
+    compositional_deconstruction: {
+      background: state.background,
+      elements: state.elements.map(el => ({
+        type: el.type,
+        bbox: el.bbox.map(n => Math.round(n)),
+        desc: el.desc,
+        color_palette: el.color_palette.slice()
+      }))
+    }
+  };
+}
+
+let jsonThrottle = null;
+function renderJSONThrottled() {
+  if (jsonThrottle) return;
+  jsonThrottle = requestAnimationFrame(() => { jsonThrottle = null; renderJSON(); });
+}
+
+function renderJSON() {
+  const obj = buildJSON();
+  const str = JSON.stringify(obj, null, 2);
+  $("json").innerHTML = highlight(str);
+}
+
+function highlight(json) {
+  const esc = escapeHtml(json);
+  return esc.replace(/("(\\.|[^"\\])*")(\s*:)?|\b(-?\d+\.?\d*)\b|([{}\[\],])/g,
+    (m, str, _g2, colon, num, punct) => {
+      if (str !== undefined) {
+        return colon
+          ? `<span class="tok-key">${str}</span><span class="tok-punct">${colon}</span>`
+          : `<span class="tok-str">${str}</span>`;
+      }
+      if (num !== undefined) return `<span class="tok-num">${num}</span>`;
+      if (punct !== undefined) return `<span class="tok-punct">${punct}</span>`;
+      return m;
+    });
+}
+
+/* ------------------------------------------------------------------ */
+/*  Actions                                                           */
+/* ------------------------------------------------------------------ */
+function addElement() {
+  const el = emptyElement({ desc: "", bbox: [200, 200, 600, 600], color_palette: ["#FFFFFF"] });
+  state.elements.push(el);
+  selectedId = el._id;
+  render();
+  // scroll new element into view
+  const wrap = $("elements");
+  wrap.lastChild?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+}
+
+function removeElement(id) {
+  state.elements = state.elements.filter(e => e._id !== id);
+  if (selectedId === id) selectedId = null;
+  render();
+}
+
+function doCopy() {
+  const str = JSON.stringify(buildJSON(), null, 2);
+  navigator.clipboard.writeText(str).then(() => toast("Copied to clipboard ✓"))
+    .catch(() => toast("Copy failed — select & copy manually"));
+}
+
+function doDownload() {
+  const str = JSON.stringify(buildJSON(), null, 2);
+  const blob = new Blob([str], { type: "application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "ideogram-prompt.json";
+  a.click();
+  URL.revokeObjectURL(a.href);
+  toast("Downloaded ✓");
+}
+
+function doImport(file) {
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      loadFromJSON(JSON.parse(reader.result));
+      toast("Imported ✓");
+    } catch (err) {
+      toast("Invalid JSON: " + err.message);
+    }
+  };
+  reader.readAsText(file);
+}
+
+function loadFromJSON(data) {
+  const sd = data.style_description || {};
+  const cd = data.compositional_deconstruction || {};
+  state = {
+    high_level_description: data.high_level_description || "",
+    style_description: {
+      aesthetics: sd.aesthetics || "",
+      lighting: sd.lighting || "",
+      photo: sd.photo || "",
+      medium: sd.medium || "",
+      color_palette: Array.isArray(sd.color_palette) ? sd.color_palette.map(normalizeUpper) : []
+    },
+    background: cd.background || "",
+    elements: Array.isArray(cd.elements) ? cd.elements.map(e => emptyElement({
+      type: e.type || "obj",
+      bbox: Array.isArray(e.bbox) && e.bbox.length === 4 ? e.bbox.map(n => clamp(Math.round(+n || 0), 0, COORD)) : [100, 100, 500, 500],
+      desc: e.desc || "",
+      color_palette: Array.isArray(e.color_palette) ? e.color_palette.map(normalizeUpper) : []
+    })) : []
+  };
+  selectedId = null;
+  render();
+}
+
+function normalizeUpper(c) { return typeof c === "string" ? c.toUpperCase() : "#FFFFFF"; }
+
+/* ------------------------------------------------------------------ */
+/*  Helpers                                                           */
+/* ------------------------------------------------------------------ */
+function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+function escapeHtml(s) { return String(s).replace(/[&<>]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c])); }
+function shortDesc(d) { d = (d || "").trim(); return d.length > 26 ? d.slice(0, 26) + "…" : (d || "object"); }
+function hexToRgba(hex, a) {
+  hex = normalizeHex(hex);
+  const n = parseInt(hex.slice(1), 16);
+  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
+}
+let toastTimer;
+function toast(msg) {
+  const t = $("toast");
+  t.textContent = msg; t.classList.add("show");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove("show"), 1800);
+}
+
+/* ------------------------------------------------------------------ */
+/*  LLM generation (OpenRouter / local llama.cpp, OpenAI-compatible)  */
+/* ------------------------------------------------------------------ */
+const CFG_KEY = "ideogram_llm_cfg";
+const PROVIDER_DEFAULTS = {
+  openrouter: { baseUrl: "https://openrouter.ai/api/v1", model: "anthropic/claude-3.5-sonnet" },
+  local:      { baseUrl: "http://localhost:8081/v1",      model: "local-model" }
+};
+
+function loadCfg() {
+  let cfg;
+  try { cfg = JSON.parse(localStorage.getItem(CFG_KEY)); } catch (_) {}
+  if (!cfg || typeof cfg !== "object") {
+    cfg = { provider: "openrouter", baseUrl: PROVIDER_DEFAULTS.openrouter.baseUrl, apiKey: "", model: PROVIDER_DEFAULTS.openrouter.model };
+  }
+  return cfg;
+}
+function saveCfg(cfg) { localStorage.setItem(CFG_KEY, JSON.stringify(cfg)); }
+
+function applyCfgToForm() {
+  const cfg = loadCfg();
+  $("cfgBaseUrl").value = cfg.baseUrl || "";
+  $("cfgApiKey").value = cfg.apiKey || "";
+  $("cfgModel").value = cfg.model || "";
+  document.querySelectorAll("#providerSeg button").forEach(b =>
+    b.classList.toggle("active", b.dataset.p === cfg.provider));
+  // open settings automatically if no key on a provider that needs one
+  if (cfg.provider === "openrouter" && !cfg.apiKey) $("cfg").open = true;
+}
+
+function readCfgFromForm() {
+  const provider = document.querySelector("#providerSeg button.active")?.dataset.p || "openrouter";
+  const cfg = {
+    provider,
+    baseUrl: $("cfgBaseUrl").value.trim().replace(/\/+$/, ""),
+    apiKey: $("cfgApiKey").value.trim(),
+    model: $("cfgModel").value.trim()
+  };
+  saveCfg(cfg);
+  return cfg;
+}
+
+const SYSTEM_PROMPT = `You are a layout designer that turns a natural-language image description into a structured JSON "prompt" for the Ideogram 4 image model.
+
+Output ONLY a single JSON object (no markdown, no commentary) with EXACTLY this shape:
+{
+  "high_level_description": "one vivid sentence describing the whole image",
+  "style_description": {
+    "aesthetics": "art direction, genre, texture and mood keywords",
+    "lighting": "lighting description",
+    "photo": "camera / lens / film / rendering notes",
+    "medium": "the medium, e.g. 'digital illustration', 'oil painting', '35mm photography'",
+    "color_palette": ["#RRGGBB", "..."]
+  },
+  "compositional_deconstruction": {
+    "background": "description of the backdrop",
+    "elements": [
+      {
+        "type": "obj" | "subject" | "text" | "logo" | "bg",
+        "bbox": [x1, y1, x2, y2],
+        "desc": "what this element is and where it sits",
+        "color_palette": ["#RRGGBB", "..."]
+      }
+    ]
+  }
+}
+
+Rules:
+- The image canvas is a 1000 x 1000 coordinate space. Origin (0,0) is the TOP-LEFT. x grows right, y grows down. Every bbox is [x1, y1, x2, y2] with 0 <= x1 < x2 <= 1000 and 0 <= y1 < y2 <= 1000.
+- Place elements sensibly: titles near the top, taglines/credits near the bottom, the main subject roughly centered. Boxes may overlap when layered (e.g. text over a subject).
+- Use 3 to 6 elements unless the description clearly calls for more. Any text the image should literally show goes in a "text" element with the exact words in its desc (e.g. reading 'NEON TIDE').
+- All colors are uppercase 6-digit hex like "#1A2B3C". Give each element a small palette (1-4 colors) that matches it.
+- Be concrete and specific. Return valid JSON only.`;
+
+let generating = false;
+
+async function runGeneration() {
+  if (generating) return;
+  const cfg = readCfgFromForm();
+  const userPrompt = $("genPrompt").value.trim();
+  if (!userPrompt) { setGenStatus("Describe the image first.", "err"); return; }
+  if (!cfg.baseUrl) { setGenStatus("Set a Base URL in settings.", "err"); $("cfg").open = true; return; }
+  if (!cfg.model)   { setGenStatus("Set a Model name in settings.", "err"); $("cfg").open = true; return; }
+  if (cfg.provider === "openrouter" && !cfg.apiKey) { setGenStatus("OpenRouter needs an API key.", "err"); $("cfg").open = true; return; }
+
+  generating = true;
+  $("genRun").disabled = true;
+  setGenStatus('<span class="spinner"></span> Contacting model…', "");
+
+  const headers = { "Content-Type": "application/json" };
+  if (cfg.apiKey) headers["Authorization"] = "Bearer " + cfg.apiKey;
+  if (cfg.provider === "openrouter") {
+    headers["HTTP-Referer"] = location.origin;
+    headers["X-Title"] = "Ideogram 4 Prompt Editor";
+  }
+
+  const body = {
+    model: cfg.model,
+    messages: [
+      { role: "system", content: SYSTEM_PROMPT },
+      { role: "user", content: "Description:\n" + userPrompt }
+    ],
+    temperature: 0.7,
+    response_format: { type: "json_object" }
+  };
+
+  try {
+    const res = await fetch(cfg.baseUrl + "/chat/completions", {
+      method: "POST", headers, body: JSON.stringify(body)
+    });
+    if (!res.ok) {
+      let detail = "";
+      try { const j = await res.json(); detail = j.error?.message || JSON.stringify(j.error || j); }
+      catch (_) { detail = await res.text().catch(() => ""); }
+      throw new Error(`HTTP ${res.status} ${res.statusText}${detail ? " — " + detail : ""}`);
+    }
+    const data = await res.json();
+    const content = data.choices?.[0]?.message?.content;
+    if (!content) throw new Error("Empty response from model.");
+    const parsed = extractJSON(content);
+    if (!parsed) throw new Error("Could not parse JSON from the model's reply.");
+    loadFromJSON(parsed);
+    setGenStatus("Generated ✓", "ok");
+    toast("Setup generated ✓");
+    setTimeout(closeGenModal, 600);
+  } catch (err) {
+    let msg = err.message || String(err);
+    if (err instanceof TypeError) {
+      msg = "Network/CORS error reaching " + cfg.baseUrl +
+            ". Check the URL, that the server is running, and that CORS is allowed.";
+    }
+    setGenStatus(msg, "err");
+  } finally {
+    generating = false;
+    $("genRun").disabled = false;
+  }
+}
+
+// Pull a JSON object out of a model reply (handles ```json fences / stray prose).
+function extractJSON(text) {
+  if (typeof text !== "string") return null;
+  let t = text.trim();
+  const fence = t.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  if (fence) t = fence[1].trim();
+  try { return JSON.parse(t); } catch (_) {}
+  const start = t.indexOf("{");
+  const end = t.lastIndexOf("}");
+  if (start !== -1 && end > start) {
+    try { return JSON.parse(t.slice(start, end + 1)); } catch (_) {}
+  }
+  return null;
+}
+
+function setGenStatus(html, cls) {
+  const s = $("genStatus");
+  s.innerHTML = html;
+  s.className = "status" + (cls ? " " + cls : "");
+}
+
+function openGenModal() {
+  applyCfgToForm();
+  setGenStatus("", "");
+  $("genOverlay").classList.add("show");
+  $("genPrompt").focus();
+}
+function closeGenModal() { $("genOverlay").classList.remove("show"); }
+
+/* ------------------------------------------------------------------ */
+/*  Wire up events                                                    */
+/* ------------------------------------------------------------------ */
+$("hld").addEventListener("input", e => { state.high_level_description = e.target.value; renderJSON(); });
+$("st-aesthetics").addEventListener("input", e => { state.style_description.aesthetics = e.target.value; renderJSON(); });
+$("st-lighting").addEventListener("input", e => { state.style_description.lighting = e.target.value; renderJSON(); });
+$("st-photo").addEventListener("input", e => { state.style_description.photo = e.target.value; renderJSON(); });
+$("st-medium").addEventListener("input", e => { state.style_description.medium = e.target.value; renderJSON(); });
+$("bg").addEventListener("input", e => { state.background = e.target.value; renderJSON(); });
+
+$("addEl").addEventListener("click", addElement);
+$("copyBtn").addEventListener("click", doCopy);
+$("copyBtn2").addEventListener("click", doCopy);
+$("downloadBtn").addEventListener("click", doDownload);
+$("downloadBtn2").addEventListener("click", doDownload);
+$("resetBtn").addEventListener("click", () => { if (confirm("Reset to the default example? Current work will be lost.")) { state = defaultState(); selectedId = null; render(); } });
+$("importBtn").addEventListener("click", () => $("fileInput").click());
+$("fileInput").addEventListener("change", e => { if (e.target.files[0]) doImport(e.target.files[0]); e.target.value = ""; });
+$("gridToggle").addEventListener("change", renderCanvas);
+$("labelToggle").addEventListener("change", renderCanvas);
+
+// deselect on stage background click
+$("stage").addEventListener("click", () => { selectedId = null; renderCanvas(); renderElements(); });
+
+// generate modal
+$("generateBtn").addEventListener("click", openGenModal);
+$("genClose").addEventListener("click", closeGenModal);
+$("genCancel").addEventListener("click", closeGenModal);
+$("genRun").addEventListener("click", runGeneration);
+let overlayPressedSelf = false;
+$("genOverlay").addEventListener("mousedown", e => { overlayPressedSelf = (e.target === $("genOverlay")); });
+$("genOverlay").addEventListener("click", e => { if (e.target === $("genOverlay") && overlayPressedSelf) closeGenModal(); });
+$("genPrompt").addEventListener("keydown", e => { if ((e.metaKey || e.ctrlKey) && e.key === "Enter") runGeneration(); });
+document.addEventListener("keydown", e => { if (e.key === "Escape" && $("genOverlay").classList.contains("show")) closeGenModal(); });
+document.querySelectorAll("#providerSeg button").forEach(btn => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll("#providerSeg button").forEach(b => b.classList.remove("active"));
+    btn.classList.add("active");
+    const p = btn.dataset.p;
+    const d = PROVIDER_DEFAULTS[p];
+    const cur = loadCfg();
+    // only auto-fill base/model if empty or still a known default of the other provider
+    const known = Object.values(PROVIDER_DEFAULTS).flatMap(x => [x.baseUrl]);
+    if (!$("cfgBaseUrl").value.trim() || known.includes($("cfgBaseUrl").value.trim().replace(/\/+$/, ""))) $("cfgBaseUrl").value = d.baseUrl;
+    const knownModels = Object.values(PROVIDER_DEFAULTS).map(x => x.model);
+    if (!$("cfgModel").value.trim() || knownModels.includes($("cfgModel").value.trim())) $("cfgModel").value = d.model;
+    saveCfg({ provider: p, baseUrl: $("cfgBaseUrl").value.trim(), apiKey: $("cfgApiKey").value.trim(), model: $("cfgModel").value.trim() });
+  });
+});
+["cfgBaseUrl", "cfgApiKey", "cfgModel"].forEach(id => $(id).addEventListener("change", readCfgFromForm));
+
+render();
+</script>
+</body>
+</html>
