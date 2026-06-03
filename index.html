@@ -338,16 +338,16 @@
         <div class="row2">
           <div>
             <label>Aspect ratio</label>
-            <input type="text" id="cf-aspect" list="aspectList" placeholder="1:1 (Square)">
-            <datalist id="aspectList">
-              <option value="1:1 (Square)"></option>
-              <option value="16:9 (Widescreen)"></option>
-              <option value="9:16 (Portrait)"></option>
-              <option value="4:3"></option>
-              <option value="3:4"></option>
-              <option value="3:2"></option>
-              <option value="2:3"></option>
-            </datalist>
+            <select id="cf-aspect">
+              <option value="1:1 (Square)">1:1 (Square)</option>
+              <option value="3:2 (Photo)">3:2 (Photo)</option>
+              <option value="4:3 (Standard)">4:3 (Standard)</option>
+              <option value="16:9 (Widescreen)">16:9 (Widescreen)</option>
+              <option value="21:9 (Ultrawide)">21:9 (Ultrawide)</option>
+              <option value="2:3 (Portrait Photo)">2:3 (Portrait Photo)</option>
+              <option value="3:4 (Portrait Standard)">3:4 (Portrait Standard)</option>
+              <option value="9:16 (Portrait Widescreen)">9:16 (Portrait Widescreen)</option>
+            </select>
           </div>
           <div>
             <label>Megapixels</label>
@@ -373,17 +373,45 @@
           <summary>Advanced parameters</summary>
           <div class="cfg-inner">
             <label>Sampler</label>
-            <input type="text" id="cf-sampler" list="samplerList">
-            <datalist id="samplerList">
-              <option value="res_multistep"></option>
-              <option value="euler"></option>
-              <option value="euler_ancestral"></option>
-              <option value="dpmpp_2m"></option>
-              <option value="dpmpp_2m_sde"></option>
-              <option value="dpmpp_3m_sde"></option>
-              <option value="ddim"></option>
-              <option value="uni_pc"></option>
-            </datalist>
+            <select id="cf-sampler">
+              <option value="euler">euler</option>
+              <option value="euler_cfg_pp">euler_cfg_pp</option>
+              <option value="euler_ancestral">euler_ancestral</option>
+              <option value="euler_ancestral_cfg_pp">euler_ancestral_cfg_pp</option>
+              <option value="heun">heun</option>
+              <option value="heunpp2">heunpp2</option>
+              <option value="dpm_2">dpm_2</option>
+              <option value="dpm_2_ancestral">dpm_2_ancestral</option>
+              <option value="lms">lms</option>
+              <option value="dpm_fast">dpm_fast</option>
+              <option value="dpm_adaptive">dpm_adaptive</option>
+              <option value="dpmpp_2s_ancestral">dpmpp_2s_ancestral</option>
+              <option value="dpmpp_sde">dpmpp_sde</option>
+              <option value="dpmpp_sde_gpu">dpmpp_sde_gpu</option>
+              <option value="dpmpp_2m">dpmpp_2m</option>
+              <option value="dpmpp_2m_cfg_pp">dpmpp_2m_cfg_pp</option>
+              <option value="dpmpp_2m_sde">dpmpp_2m_sde</option>
+              <option value="dpmpp_2m_sde_gpu">dpmpp_2m_sde_gpu</option>
+              <option value="dpmpp_3m_sde">dpmpp_3m_sde</option>
+              <option value="dpmpp_3m_sde_gpu">dpmpp_3m_sde_gpu</option>
+              <option value="ddpm">ddpm</option>
+              <option value="lcm">lcm</option>
+              <option value="ipndm">ipndm</option>
+              <option value="ipndm_v">ipndm_v</option>
+              <option value="deis">deis</option>
+              <option value="res_multistep">res_multistep</option>
+              <option value="res_multistep_cfg_pp">res_multistep_cfg_pp</option>
+              <option value="res_multistep_ancestral">res_multistep_ancestral</option>
+              <option value="gradient_estimation">gradient_estimation</option>
+              <option value="er_sde">er_sde</option>
+              <option value="seeds_2">seeds_2</option>
+              <option value="seeds_3">seeds_3</option>
+              <option value="sa_solver">sa_solver</option>
+              <option value="sa_solver_pece">sa_solver_pece</option>
+              <option value="ddim">ddim</option>
+              <option value="uni_pc">uni_pc</option>
+              <option value="uni_pc_bh2">uni_pc_bh2</option>
+            </select>
             <div class="row2">
               <div><label>CFG override</label><input type="number" id="cf-cfgo" step="0.1"></div>
               <div><label>Batch size</label><input type="number" id="cf-batch" min="1" step="1"></div>
@@ -1233,12 +1261,14 @@ function applyComfyForm() {
   $("cf-url").value = comfyCfg.url;
   syncConnFields();
   $("cf-aspect").value = comfyCfg.aspect_ratio;
+  if ($("cf-aspect").selectedIndex < 0) { comfyCfg.aspect_ratio = "1:1 (Square)"; $("cf-aspect").value = comfyCfg.aspect_ratio; saveComfyCfg(); }
   $("cf-megapixels").value = comfyCfg.megapixels;
   $("cf-preset").value = comfyCfg.preset;
   $("cf-seed").value = comfyCfg.seed;
   $("cf-randomize").checked = comfyCfg.randomize;
   $("cf-cfg").value = comfyCfg.cfg;
   $("cf-sampler").value = comfyCfg.sampler_name;
+  if ($("cf-sampler").selectedIndex < 0) { comfyCfg.sampler_name = "res_multistep"; $("cf-sampler").value = comfyCfg.sampler_name; saveComfyCfg(); }
   $("cf-cfgo").value = comfyCfg.cfg_override;
   $("cf-start").value = comfyCfg.start_percent;
   $("cf-end").value = comfyCfg.end_percent;
