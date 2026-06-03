@@ -331,6 +331,7 @@
       <div class="panel-body">
         <label>Server URL <span style="color:var(--faint)">(blank = same origin, e.g. via the proxy)</span></label>
         <input type="text" id="cf-url" placeholder="http://192.168.2.33:8188 — or blank when using comfy_proxy.py" autocomplete="off">
+        <div class="hint" id="cf-target" style="margin-top:6px;"></div>
         <div class="row2">
           <div>
             <label>Aspect ratio</label>
@@ -1412,8 +1413,27 @@ async function comfyTest() {
   }
 }
 
+// Shows where renders will actually be sent, so the "points at the wrong
+// origin" CORS trap is visible instead of silent.
+function updateComfyTarget() {
+  const el = $("cf-target");
+  if (!el) return;
+  if (location.protocol === "file:") {
+    el.style.color = "var(--danger)";
+    el.innerHTML = "⚠ Opened as a local <code>file://</code> page — the browser will block its cross-origin calls. Run <code>comfy_proxy.py</code> and open <code>http://localhost:8189/</code> instead (then leave this blank).";
+    return;
+  }
+  const raw = $("cf-url").value.trim().replace(/\/+$/, "");
+  const base = raw || location.origin;
+  const sameOrigin = base === location.origin;
+  el.style.color = sameOrigin ? "var(--success)" : "";
+  el.innerHTML = "→ sends renders to <code>" + escapeHtml(base) + "</code>" +
+    (sameOrigin ? " (same origin — no CORS, good)" : " (direct — needs ComfyUI started with <code>--enable-cors-header</code>, else CORS-blocked)");
+}
+
 // wiring
 $("cf-test").addEventListener("click", comfyTest);
+$("cf-url").addEventListener("input", updateComfyTarget);
 document.querySelectorAll("#modeSeg button").forEach(btn => {
   btn.addEventListener("click", () => { comfyCfg.mode = btn.dataset.mode; saveComfyCfg(); applyMode(); });
 });
@@ -1424,7 +1444,15 @@ $("cf-rerollSeed").addEventListener("click", () => { comfyCfg.seed = randomSeed(
   const e = $(id); if (e) e.addEventListener("change", readComfyForm);
 });
 
+// If the page is served over http(s) — i.e. opened through comfy_proxy.py —
+// and the URL is still the factory default IP, switch to same-origin so renders
+// go through the proxy instead of being CORS-blocked against ComfyUI directly.
+if ((location.protocol === "http:" || location.protocol === "https:") && comfyCfg.url === defaultComfyCfg().url) {
+  comfyCfg.url = "";
+  saveComfyCfg();
+}
 applyComfyForm();
+updateComfyTarget();
 applyMode();
 render();
 </script>
