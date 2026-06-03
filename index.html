@@ -329,8 +329,11 @@
     <section class="panel comfy-only" id="comfyPanel">
       <div class="panel-head"><span class="chev">▶</span><h2>ComfyUI render</h2></div>
       <div class="panel-body">
-        <label>Server URL <span style="color:var(--faint)">(blank = same origin, e.g. via the proxy)</span></label>
-        <input type="text" id="cf-url" placeholder="http://192.168.2.33:8188 — or blank when using comfy_proxy.py" autocomplete="off">
+        <label class="toggle" style="margin-top:2px;"><input type="checkbox" id="cf-direct"> Connect directly to ComfyUI <span style="color:var(--faint)">(only if it runs with --enable-cors-header)</span></label>
+        <div id="cf-urlRow" style="display:none;">
+          <label>ComfyUI URL</label>
+          <input type="text" id="cf-url" placeholder="http://192.168.2.33:8188" autocomplete="off">
+        </div>
         <div class="hint" id="cf-target" style="margin-top:6px;"></div>
         <div class="row2">
           <div>
@@ -407,7 +410,7 @@
           <button class="primary" id="renderBtn2" style="flex:1;">🎨 Render</button>
         </div>
         <div class="render-row" style="margin-top:8px;"><span class="status" id="cf-testStatus"></span></div>
-        <div class="hint">Renders the current prompt on your ComfyUI server using the bundled Ideogram 4 workflow; the result shows in the middle panel.<br><br><b>Browsers block direct cross-origin calls.</b> Two ways around it: either start ComfyUI with <code>--enable-cors-header</code> and point the URL straight at it, or run the included <code>comfy_proxy.py</code> (no ComfyUI flags needed), open the editor at <code>http://localhost:8189/</code>, and leave the URL blank.</div>
+        <div class="hint">Renders the current prompt on your ComfyUI server using the bundled Ideogram 4 workflow; the result shows in the middle panel.<br><br><b>Recommended:</b> run <code>comfy_proxy.py</code> on a host that can reach ComfyUI and open this editor from the address it prints (e.g. <code>http://192.168.2.35:8189/</code>). Leave "Connect directly" unchecked — the proxy forwards everything, so there's no CORS. Only tick "Connect directly" if ComfyUI itself runs with <code>--enable-cors-header</code>.</div>
       </div>
     </section>
   </div>
@@ -1188,6 +1191,7 @@ function defaultComfyCfg() {
   return {
     mode: "manual",
     url: "http://192.168.2.33:8188",
+    direct: false,
     aspect_ratio: "1:1 (Square)", megapixels: 2,
     preset: "Turbo", seed: 453251084258580, randomize: true,
     cfg: 7, sampler_name: "res_multistep",
@@ -1203,10 +1207,12 @@ let comfyCfg = loadComfyCfg();
 function loadComfyCfg() { let c; try { c = JSON.parse(localStorage.getItem(COMFY_KEY)); } catch (_) {} return Object.assign(defaultComfyCfg(), c && typeof c === "object" ? c : {}); }
 function saveComfyCfg() { localStorage.setItem(COMFY_KEY, JSON.stringify(comfyCfg)); }
 function comfyBase() {
-  const u = (comfyCfg.url || "").trim().replace(/\/+$/, "");
-  if (u) return u;
-  // Blank => talk to the same origin that served this page (i.e. the proxy).
-  return (location.protocol === "http:" || location.protocol === "https:") ? location.origin : "";
+  // Default: talk to whatever origin served this page (the proxy) -> no CORS.
+  if (!comfyCfg.direct) {
+    return (location.protocol === "http:" || location.protocol === "https:") ? location.origin : "";
+  }
+  // Opt-in: connect straight to ComfyUI (requires --enable-cors-header there).
+  return (comfyCfg.url || "").trim().replace(/\/+$/, "");
 }
 
 function getClientId() {
@@ -1221,8 +1227,11 @@ function applyMode() {
   document.body.classList.toggle("comfy-mode", comfyCfg.mode === "comfy");
   document.querySelectorAll("#modeSeg button").forEach(b => b.classList.toggle("active", b.dataset.mode === comfyCfg.mode));
 }
+function syncConnFields() { $("cf-urlRow").style.display = $("cf-direct").checked ? "block" : "none"; }
 function applyComfyForm() {
+  $("cf-direct").checked = comfyCfg.direct;
   $("cf-url").value = comfyCfg.url;
+  syncConnFields();
   $("cf-aspect").value = comfyCfg.aspect_ratio;
   $("cf-megapixels").value = comfyCfg.megapixels;
   $("cf-preset").value = comfyCfg.preset;
@@ -1241,6 +1250,7 @@ function applyComfyForm() {
   $("cf-batch").value = comfyCfg.batch_size;
 }
 function readComfyForm() {
+  comfyCfg.direct = $("cf-direct").checked;
   comfyCfg.url = $("cf-url").value.trim();
   comfyCfg.aspect_ratio = $("cf-aspect").value.trim();
   comfyCfg.megapixels = parseFloat($("cf-megapixels").value) || 0;
@@ -1418,22 +1428,29 @@ async function comfyTest() {
 function updateComfyTarget() {
   const el = $("cf-target");
   if (!el) return;
-  if (location.protocol === "file:") {
-    el.style.color = "var(--danger)";
-    el.innerHTML = "⚠ Opened as a local <code>file://</code> page — the browser will block its cross-origin calls. Run <code>comfy_proxy.py</code> and open <code>http://localhost:8189/</code> instead (then leave this blank).";
+  const direct = $("cf-direct").checked;
+  if (!direct) {
+    if (location.protocol === "file:") {
+      el.style.color = "var(--danger)";
+      el.innerHTML = "⚠ This is a local <code>file://</code> page. Run <code>comfy_proxy.py</code> on the host and open the address it prints (e.g. <code>http://192.168.2.35:8189/</code>) — don't open the file directly.";
+      return;
+    }
+    el.style.color = "var(--success)";
+    el.innerHTML = "→ renders go to <code>" + escapeHtml(location.origin) + "</code> — the server that loaded this page (the proxy forwards to ComfyUI). No CORS.";
     return;
   }
   const raw = $("cf-url").value.trim().replace(/\/+$/, "");
   const base = raw || location.origin;
   const sameOrigin = base === location.origin;
-  el.style.color = sameOrigin ? "var(--success)" : "";
-  el.innerHTML = "→ sends renders to <code>" + escapeHtml(base) + "</code>" +
-    (sameOrigin ? " (same origin — no CORS, good)" : " (direct — needs ComfyUI started with <code>--enable-cors-header</code>, else CORS-blocked)");
+  el.style.color = sameOrigin ? "var(--success)" : "var(--accent-2)";
+  el.innerHTML = "→ renders go directly to <code>" + escapeHtml(base) + "</code>" +
+    (sameOrigin ? "" : " — ComfyUI must be started with <code>--enable-cors-header</code>, otherwise the browser blocks it (CORS).");
 }
 
 // wiring
 $("cf-test").addEventListener("click", comfyTest);
 $("cf-url").addEventListener("input", updateComfyTarget);
+$("cf-direct").addEventListener("change", () => { readComfyForm(); syncConnFields(); updateComfyTarget(); });
 document.querySelectorAll("#modeSeg button").forEach(btn => {
   btn.addEventListener("click", () => { comfyCfg.mode = btn.dataset.mode; saveComfyCfg(); applyMode(); });
 });
@@ -1444,13 +1461,6 @@ $("cf-rerollSeed").addEventListener("click", () => { comfyCfg.seed = randomSeed(
   const e = $(id); if (e) e.addEventListener("change", readComfyForm);
 });
 
-// If the page is served over http(s) — i.e. opened through comfy_proxy.py —
-// and the URL is still the factory default IP, switch to same-origin so renders
-// go through the proxy instead of being CORS-blocked against ComfyUI directly.
-if ((location.protocol === "http:" || location.protocol === "https:") && comfyCfg.url === defaultComfyCfg().url) {
-  comfyCfg.url = "";
-  saveComfyCfg();
-}
 applyComfyForm();
 updateComfyTarget();
 applyMode();
