@@ -10,7 +10,7 @@ Everything lives in [`index.html`](index.html) (HTML + CSS + vanilla JS, no depe
 - **Structured prompt builder** — high-level description, style block (aesthetics, lighting, photo, medium, palette), background, and a reorderable list of elements.
 - **Live JSON output** — syntax-highlighted, copy or download with one click.
 - **Generate from text** — describe the image in plain language and an OpenAI-compatible LLM (OpenRouter or a local `llama.cpp` server) fills in the whole schema. Settings are stored in `localStorage`.
-- **ComfyUI mode** — render the current prompt on your ComfyUI server using the bundled Ideogram 4 workflow, with every workflow parameter exposed and the result (plus live progress) shown in the editor.
+- **ComfyUI mode** — render the current prompt on your ComfyUI server using the bundled Ideogram 4 workflow, with every workflow parameter exposed and the result (plus live progress) shown in the editor. Renders collect in a gallery with a full-size viewer, and can be saved permanently.
 - **Import / Reset / Download** — round-trip the prompt JSON.
 
 ## Quick start
@@ -56,6 +56,10 @@ The model returns the full schema, which you can then edit visually. Settings ar
 ## ComfyUI mode
 
 ComfyUI mode renders the current prompt on your server with the bundled Ideogram 4 workflow ([`workflow.json`](workflow.json), embedded in the page). The left panel exposes every meaningful parameter — connection (proxy vs. direct), aspect ratio, megapixels, quality preset (Quality/Default/Turbo), seed (+ randomize), guidance CFG, sampler, CFG-override, batch size, and the diffusion / unconditional / VAE / CLIP model names. The editor's prompt JSON is injected into the positive-prompt node on every render. Results and live progress appear in the middle panel. A **Test connection** button reports whether the server is reachable (and its version) or what's wrong.
+
+The middle panel also reshapes to the selected **aspect ratio** so the layout preview matches the real canvas (coordinates stay normalized `0–1000` per axis).
+
+**Gallery & saving.** Every render is added to a **History** strip below the result; click the result image or any thumbnail to open a full-size **viewer modal** with prev/next (arrow keys), seed/aspect info, and a download link. By default renders are ComfyUI **temp** files, so the gallery is session-only. Tick **Save renders permanently** to switch the output node to `SaveImage` (files land in ComfyUI's `output/` as `ideogrammar_*.png`); those renders persist in the gallery across reloads (stored in `localStorage`, last 60). **Clear** empties the gallery list only — it never deletes files from `output/`.
 
 ### The CORS problem (and why the proxy exists)
 
