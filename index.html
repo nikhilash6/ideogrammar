@@ -251,6 +251,24 @@
   .progress { width: 100%; height: 6px; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
   .progress > div { height: 100%; width: 0; background: linear-gradient(90deg, var(--accent), var(--accent-2)); transition: width .2s ease; }
   .render-row { display: flex; align-items: center; gap: 10px; }
+  .render-img-wrap img { cursor: zoom-in; }
+
+  /* ---------- render gallery ---------- */
+  .gallery { display: flex; flex-wrap: wrap; gap: 7px; width: 100%; }
+  .gallery .thumb { position: relative; width: 56px; height: 56px; border-radius: var(--r-sm); overflow: hidden; border: 1px solid var(--border); cursor: pointer; background: var(--panel); flex-shrink: 0; transition: border-color .14s, transform .1s; }
+  .gallery .thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .gallery .thumb:hover { border-color: var(--border-strong); transform: translateY(-1px); }
+  .gallery .thumb.active { border-color: var(--accent); box-shadow: var(--ring); }
+
+  /* ---------- image viewer modal ---------- */
+  .img-modal { position: relative; display: grid; grid-template-columns: auto minmax(0,1fr) auto; align-items: center; gap: 10px; max-width: 96vw; }
+  #imgFull { max-width: 84vw; max-height: 78vh; object-fit: contain; border-radius: var(--r); box-shadow: var(--shadow), 0 0 0 1px var(--border); display: block; }
+  .img-arrow { width: 40px; height: 64px; font-size: 26px; line-height: 1; color: var(--text); background: rgba(20,26,36,.6); border: 1px solid var(--border-strong); border-radius: var(--r); }
+  .img-arrow:hover { background: var(--elevated); transform: none; }
+  .img-bar { position: absolute; left: 0; right: 0; bottom: -44px; grid-column: 2; display: flex; align-items: center; gap: 12px; color: var(--muted); font-size: 12px; }
+  .img-bar .spacer { flex: 1; }
+  .img-bar a, .img-bar button { color: var(--text); text-decoration: none; background: var(--elevated); border: 1px solid var(--border-strong); border-radius: var(--r-sm); padding: 6px 12px; font-size: 12px; font-weight: 500; cursor: pointer; }
+  .img-bar a:hover, .img-bar button:hover { background: #222c3c; }
 </style>
 </head>
 <body>
@@ -459,10 +477,14 @@
       <div class="col-title" style="align-self:flex-start; margin-top:6px;">Rendered result</div>
       <div class="render-img-wrap" id="renderImgWrap">
         <div class="render-placeholder" id="renderPlaceholder">Set parameters on the left and press <b>Render</b>.</div>
-        <img id="renderImg" alt="rendered result">
+        <img id="renderImg" alt="rendered result" title="Click to enlarge">
       </div>
       <div class="progress"><div id="renderBar"></div></div>
       <div class="render-row"><span class="status" id="renderStatus"></span></div>
+      <div id="galleryRow" style="display:none; flex-direction:column; align-items:stretch; gap:6px; width:100%;">
+        <div class="col-title" style="margin:6px 0 0;">History <span id="galleryCount" class="count"></span></div>
+        <div class="gallery" id="gallery"></div>
+      </div>
     </div>
   </div>
 
@@ -511,6 +533,21 @@
       <span class="status" id="genStatus"></span>
       <button id="genCancel">Cancel</button>
       <button class="primary" id="genRun">Generate</button>
+    </div>
+  </div>
+</div>
+
+<!-- IMAGE VIEWER MODAL -->
+<div class="overlay" id="imgOverlay">
+  <div class="img-modal">
+    <button class="img-arrow prev" id="imgPrev" title="Previous (←)">‹</button>
+    <img id="imgFull" alt="render">
+    <button class="img-arrow next" id="imgNext" title="Next (→)">›</button>
+    <div class="img-bar">
+      <span id="imgInfo"></span>
+      <span class="spacer"></span>
+      <a id="imgDownload" download>⤓ Download</a>
+      <button id="imgClose">Close</button>
     </div>
   </div>
 </div>
@@ -1443,7 +1480,52 @@ async function showResult(base, promptId) {
   el.src = url;
   setRenderStatus("Done ✓ · seed " + comfyCfg.seed, "ok");
   toast("Render complete ✓", "ok");
+  addRenderToHistory({ url, seed: comfyCfg.seed, aspect: comfyCfg.aspect_ratio, time: new Date().toLocaleTimeString() });
 }
+
+/* ---- render gallery + full-image viewer (session history) ---- */
+const renderHistory = [];
+let viewerIndex = 0;
+
+function addRenderToHistory(entry) {
+  renderHistory.push(entry);
+  viewerIndex = renderHistory.length - 1;
+  renderGallery();
+}
+
+function renderGallery() {
+  const row = $("galleryRow"), g = $("gallery");
+  if (!renderHistory.length) { row.style.display = "none"; return; }
+  row.style.display = "flex";
+  $("galleryCount").textContent = renderHistory.length;
+  g.innerHTML = "";
+  renderHistory.forEach((it, i) => {
+    const t = document.createElement("div");
+    t.className = "thumb" + (i === viewerIndex ? " active" : "");
+    t.title = "Seed " + it.seed + " · " + it.aspect;
+    const im = document.createElement("img");
+    im.src = it.url; im.alt = "render " + (i + 1);
+    t.appendChild(im);
+    t.addEventListener("click", () => openImgModal(i));
+    g.appendChild(t);
+  });
+}
+
+function openImgModal(index) {
+  if (!renderHistory.length) return;
+  viewerIndex = Math.max(0, Math.min(renderHistory.length - 1, index));
+  const it = renderHistory[viewerIndex];
+  $("imgFull").src = it.url;
+  $("imgInfo").textContent = `#${viewerIndex + 1} of ${renderHistory.length} · seed ${it.seed} · ${it.aspect}` + (it.time ? " · " + it.time : "");
+  const dl = $("imgDownload");
+  dl.href = it.url; dl.download = "ideogram-" + it.seed + ".png";
+  $("imgPrev").style.visibility = viewerIndex > 0 ? "visible" : "hidden";
+  $("imgNext").style.visibility = viewerIndex < renderHistory.length - 1 ? "visible" : "hidden";
+  $("imgOverlay").classList.add("show");
+  renderGallery();
+}
+function closeImgModal() { $("imgOverlay").classList.remove("show"); }
+function stepImg(d) { openImgModal(viewerIndex + d); }
 
 let testing = false;
 async function comfyTest() {
@@ -1502,6 +1584,21 @@ $("cf-url").addEventListener("input", updateComfyTarget);
 $("cf-direct").addEventListener("change", () => { readComfyForm(); syncConnFields(); updateComfyTarget(); });
 $("cf-aspect").addEventListener("change", applyCanvasAspect);
 window.addEventListener("resize", applyCanvasAspect);
+
+// image viewer modal
+$("renderImg").addEventListener("click", () => { if (renderHistory.length) openImgModal(renderHistory.length - 1); });
+$("imgPrev").addEventListener("click", () => stepImg(-1));
+$("imgNext").addEventListener("click", () => stepImg(1));
+$("imgClose").addEventListener("click", closeImgModal);
+let imgOverlayPressedSelf = false;
+$("imgOverlay").addEventListener("mousedown", e => { imgOverlayPressedSelf = (e.target === $("imgOverlay")); });
+$("imgOverlay").addEventListener("click", e => { if (e.target === $("imgOverlay") && imgOverlayPressedSelf) closeImgModal(); });
+document.addEventListener("keydown", e => {
+  if (!$("imgOverlay").classList.contains("show")) return;
+  if (e.key === "Escape") closeImgModal();
+  else if (e.key === "ArrowLeft") stepImg(-1);
+  else if (e.key === "ArrowRight") stepImg(1);
+});
 document.querySelectorAll("#modeSeg button").forEach(btn => {
   btn.addEventListener("click", () => { comfyCfg.mode = btn.dataset.mode; saveComfyCfg(); applyMode(); });
 });
