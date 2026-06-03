@@ -55,22 +55,39 @@ The model returns the full schema, which you can then edit visually. Settings ar
 
 ## ComfyUI mode
 
-ComfyUI mode renders the current prompt on your server with the bundled Ideogram 4 workflow ([`workflow.json`](workflow.json), embedded in the page). The left panel exposes every meaningful parameter — server URL, aspect ratio, megapixels, quality preset (Quality/Default/Turbo), seed (+ randomize), guidance CFG, sampler, CFG-override, batch size, and the diffusion / unconditional / VAE / CLIP model names. The editor's prompt JSON is injected into the positive-prompt node on every render. Results and live progress appear in the middle panel.
+ComfyUI mode renders the current prompt on your server with the bundled Ideogram 4 workflow ([`workflow.json`](workflow.json), embedded in the page). The left panel exposes every meaningful parameter — connection (proxy vs. direct), aspect ratio, megapixels, quality preset (Quality/Default/Turbo), seed (+ randomize), guidance CFG, sampler, CFG-override, batch size, and the diffusion / unconditional / VAE / CLIP model names. The editor's prompt JSON is injected into the positive-prompt node on every render. Results and live progress appear in the middle panel. A **Test connection** button reports whether the server is reachable (and its version) or what's wrong.
 
 ### The CORS problem (and why the proxy exists)
 
-A browser will not let a page read responses from a **different origin** unless that server sends CORS headers. ComfyUI sends none by default. (Server-to-server clients — like a Python script using `httpx` — never hit this, because CORS is a browser-only rule.) So a browser-based editor needs one of:
+A browser will not let a page read responses from a **different origin** unless that server sends CORS headers. ComfyUI sends none by default. (Server-to-server clients — like a Python script using `httpx` — never hit this, because CORS is a browser-only rule.) So a browser page that loads from one place and calls ComfyUI somewhere else is blocked.
+
+The proxy fixes this by being **both** the web server that serves the editor **and** the forwarder to ComfyUI — so the browser only ever talks to *one* origin. The editor defaults to talking to whatever origin served it, so when you open it *through the proxy*, it just works.
 
 **Option A — run the bundled proxy (recommended; no ComfyUI changes):**
 
+Use the start/stop helper on a host that can reach ComfyUI:
+
 ```bash
-python comfy_proxy.py
-# defaults: serves http://localhost:8189/ , forwards to http://192.168.2.33:8188
+./comfy_proxy.sh start      # start (listens on 0.0.0.0:8189, forwards to ComfyUI)
+./comfy_proxy.sh status     # is it running? what address?
+./comfy_proxy.sh stop
+./comfy_proxy.sh restart
+./comfy_proxy.sh logs       # tail the log
 ```
 
-Then open **http://localhost:8189/**, switch to **ComfyUI** mode, and leave the **Server URL blank** (blank = same origin). The proxy serves the editor and forwards all API calls + the `/ws` progress WebSocket to ComfyUI, so the browser only ever talks to one origin.
+It prints the address to open, e.g. `http://192.168.2.35:8189/`. Open **that** address in your browser (from any machine on the LAN), switch to **ComfyUI** mode, and leave **"Connect directly to ComfyUI" unchecked**. The green line under it confirms renders go to the proxy. The proxy forwards all API calls + the `/ws` progress WebSocket, so there's no CORS.
 
-Proxy flags:
+Override defaults with environment variables:
+
+```bash
+COMFY_URL=http://192.168.2.33:8188 PROXY_HOST=0.0.0.0 PROXY_PORT=8189 ./comfy_proxy.sh start
+```
+
+Or run the Python directly (same effect, no PID/log management):
+
+```bash
+python comfy_proxy.py --comfy http://192.168.2.33:8188 --host 0.0.0.0 --port 8189
+```
 
 | Flag | Default | Purpose |
 |------|---------|---------|
@@ -80,15 +97,17 @@ Proxy flags:
 | `--html PATH` | `./index.html` | page to serve |
 | `--verbose` | off | log every request |
 
-It is stdlib-only (Python 3.8+) — nothing to install.
+Both are stdlib-only (Python 3.8+) — nothing to install.
 
-**Option B — enable CORS in ComfyUI:**
+> **Common mistake:** serving the editor with a *plain* static server (e.g. `python -m http.server`) and opening that. A static server hands out `index.html` but 404s on `/system_stats`, `/prompt`, etc. — so renders fail. The editor must be served by `comfy_proxy.py`, which forwards those calls.
+
+**Option B — connect directly (enable CORS in ComfyUI):**
 
 ```bash
 python main.py --listen --enable-cors-header
 ```
 
-Then point the editor's **Server URL** straight at ComfyUI (e.g. `http://192.168.2.33:8188`).
+Then in the editor, tick **"Connect directly to ComfyUI"** and enter its URL (e.g. `http://192.168.2.33:8188`). No proxy needed in this mode.
 
 ### Test connection
 
@@ -99,7 +118,8 @@ The **Test connection** button in the ComfyUI panel pings `/system_stats` and re
 | File | Purpose |
 |------|---------|
 | [`index.html`](index.html) | The entire app — editor, canvas, LLM generation, ComfyUI mode. |
-| [`comfy_proxy.py`](comfy_proxy.py) | Optional stdlib proxy: serves the page + forwards HTTP and the WebSocket to ComfyUI (same-origin, no CORS flags). |
+| [`comfy_proxy.py`](comfy_proxy.py) | Stdlib proxy: serves the page + forwards HTTP and the WebSocket to ComfyUI (same-origin, no CORS flags). |
+| [`comfy_proxy.sh`](comfy_proxy.sh) | start/stop/status/restart/logs helper for the proxy (writes a PID file + log). |
 | [`workflow.json`](workflow.json) | The Ideogram 4 ComfyUI workflow (API format) the render mode is built around; also embedded in `index.html`. |
 
 ## Notes
