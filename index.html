@@ -386,6 +386,8 @@
         <label>Guidance (CFG)</label>
         <input type="number" id="cf-cfg" min="0" step="0.1">
 
+        <label class="toggle" style="margin-top:12px;"><input type="checkbox" id="cf-save"> Save renders permanently <span style="color:var(--faint)">(ComfyUI output/, kept in gallery across reloads)</span></label>
+
         <details class="cfg" style="margin-top:12px;">
           <summary>Advanced parameters</summary>
           <div class="cfg-inner">
@@ -482,7 +484,7 @@
       <div class="progress"><div id="renderBar"></div></div>
       <div class="render-row"><span class="status" id="renderStatus"></span></div>
       <div id="galleryRow" style="display:none; flex-direction:column; align-items:stretch; gap:6px; width:100%;">
-        <div class="col-title" style="margin:6px 0 0;">History <span id="galleryCount" class="count"></span></div>
+        <div class="col-title" style="margin:6px 0 0; display:flex; align-items:center; gap:8px;">History <span id="galleryCount" class="count"></span><span style="flex:1"></span><button id="galleryClear" title="Clear gallery list (does not delete files)" style="padding:2px 9px; font-size:11px; text-transform:none; letter-spacing:0;">Clear</button></div>
         <div class="gallery" id="gallery"></div>
       </div>
     </div>
@@ -1255,7 +1257,7 @@ function defaultComfyCfg() {
   return {
     mode: "manual",
     url: "http://192.168.2.33:8188",
-    direct: false,
+    direct: false, save: false,
     aspect_ratio: "1:1 (Square)", megapixels: 2,
     preset: "Turbo", seed: 453251084258580, randomize: true,
     cfg: 7, sampler_name: "res_multistep",
@@ -1314,6 +1316,7 @@ function applyCanvasAspect() {
 function syncConnFields() { $("cf-urlRow").style.display = $("cf-direct").checked ? "block" : "none"; }
 function applyComfyForm() {
   $("cf-direct").checked = comfyCfg.direct;
+  $("cf-save").checked = comfyCfg.save;
   $("cf-url").value = comfyCfg.url;
   syncConnFields();
   $("cf-aspect").value = comfyCfg.aspect_ratio;
@@ -1337,6 +1340,7 @@ function applyComfyForm() {
 }
 function readComfyForm() {
   comfyCfg.direct = $("cf-direct").checked;
+  comfyCfg.save = $("cf-save").checked;
   comfyCfg.url = $("cf-url").value.trim();
   comfyCfg.aspect_ratio = $("cf-aspect").value.trim();
   comfyCfg.megapixels = parseFloat($("cf-megapixels").value) || 0;
@@ -1376,6 +1380,10 @@ function buildWorkflow() {
   wf[NODE.clip].inputs.clip_name = comfyCfg.clip_name;
   wf[NODE.clip].inputs.type = comfyCfg.clip_type;
   wf[NODE.latent].inputs.batch_size = comfyCfg.batch_size;
+  if (comfyCfg.save) {
+    // Permanent output/ files instead of temp previews.
+    wf["25"] = { inputs: { images: ["98:13", 0], filename_prefix: "ideogrammar" }, class_type: "SaveImage", _meta: { title: "Save Image" } };
+  }
   return wf;
 }
 
@@ -1473,25 +1481,38 @@ async function showResult(base, promptId) {
   let img = null;
   for (const nodeId of Object.keys(outputs)) { const o = outputs[nodeId]; if (o.images && o.images.length) { img = o.images[o.images.length - 1]; break; } }
   if (!img) throw new Error("Render finished but produced no image.");
-  const url = base + "/view?" + new URLSearchParams({ filename: img.filename, subfolder: img.subfolder || "", type: img.type || "output" }).toString();
+  const entry = { filename: img.filename, subfolder: img.subfolder || "", type: img.type || "output", seed: comfyCfg.seed, aspect: comfyCfg.aspect_ratio, time: new Date().toLocaleTimeString() };
   const el = $("renderImg");
   el.onload = () => { el.style.display = "block"; $("renderPlaceholder").style.display = "none"; };
-  el.onerror = () => setRenderStatus("Image rendered but could not be loaded from " + base + "/view", "err");
-  el.src = url;
-  setRenderStatus("Done ✓ · seed " + comfyCfg.seed, "ok");
+  el.onerror = () => setRenderStatus("Image rendered but could not be loaded from " + comfyBase() + "/view", "err");
+  el.src = viewUrl(entry);
+  setRenderStatus("Done ✓ · seed " + comfyCfg.seed + (comfyCfg.save ? " · saved" : ""), "ok");
   toast("Render complete ✓", "ok");
-  addRenderToHistory({ url, seed: comfyCfg.seed, aspect: comfyCfg.aspect_ratio, time: new Date().toLocaleTimeString() });
+  addRenderToHistory(entry);
 }
 
 /* ---- render gallery + full-image viewer (session history) ---- */
 const renderHistory = [];
 let viewerIndex = 0;
+const HIST_KEY = "ideogram_comfy_history";
 
+function viewUrl(it) {
+  return comfyBase() + "/view?" + new URLSearchParams({ filename: it.filename, subfolder: it.subfolder || "", type: it.type || "output" }).toString();
+}
 function addRenderToHistory(entry) {
   renderHistory.push(entry);
   viewerIndex = renderHistory.length - 1;
+  saveRenderHistory();
   renderGallery();
 }
+// Persist only permanent (output/) renders — temp previews would 404 after a reload.
+function saveRenderHistory() {
+  try { localStorage.setItem(HIST_KEY, JSON.stringify(renderHistory.filter(e => e.type === "output").slice(-60))); } catch (_) {}
+}
+function loadRenderHistory() {
+  try { const a = JSON.parse(localStorage.getItem(HIST_KEY)); if (Array.isArray(a)) { renderHistory.push(...a); viewerIndex = renderHistory.length - 1; } } catch (_) {}
+}
+function clearRenderHistory() { renderHistory.length = 0; viewerIndex = 0; saveRenderHistory(); renderGallery(); }
 
 function renderGallery() {
   const row = $("galleryRow"), g = $("gallery");
@@ -1504,7 +1525,7 @@ function renderGallery() {
     t.className = "thumb" + (i === viewerIndex ? " active" : "");
     t.title = "Seed " + it.seed + " · " + it.aspect;
     const im = document.createElement("img");
-    im.src = it.url; im.alt = "render " + (i + 1);
+    im.src = viewUrl(it); im.alt = "render " + (i + 1);
     t.appendChild(im);
     t.addEventListener("click", () => openImgModal(i));
     g.appendChild(t);
@@ -1515,10 +1536,10 @@ function openImgModal(index) {
   if (!renderHistory.length) return;
   viewerIndex = Math.max(0, Math.min(renderHistory.length - 1, index));
   const it = renderHistory[viewerIndex];
-  $("imgFull").src = it.url;
+  $("imgFull").src = viewUrl(it);
   $("imgInfo").textContent = `#${viewerIndex + 1} of ${renderHistory.length} · seed ${it.seed} · ${it.aspect}` + (it.time ? " · " + it.time : "");
   const dl = $("imgDownload");
-  dl.href = it.url; dl.download = "ideogram-" + it.seed + ".png";
+  dl.href = viewUrl(it); dl.download = "ideogram-" + it.seed + ".png";
   $("imgPrev").style.visibility = viewerIndex > 0 ? "visible" : "hidden";
   $("imgNext").style.visibility = viewerIndex < renderHistory.length - 1 ? "visible" : "hidden";
   $("imgOverlay").classList.add("show");
@@ -1590,6 +1611,7 @@ $("renderImg").addEventListener("click", () => { if (renderHistory.length) openI
 $("imgPrev").addEventListener("click", () => stepImg(-1));
 $("imgNext").addEventListener("click", () => stepImg(1));
 $("imgClose").addEventListener("click", closeImgModal);
+$("galleryClear").addEventListener("click", () => { if (renderHistory.length && confirm("Clear the render gallery? This only clears the list here — files in ComfyUI's output/ are not deleted.")) clearRenderHistory(); });
 let imgOverlayPressedSelf = false;
 $("imgOverlay").addEventListener("mousedown", e => { imgOverlayPressedSelf = (e.target === $("imgOverlay")); });
 $("imgOverlay").addEventListener("click", e => { if (e.target === $("imgOverlay") && imgOverlayPressedSelf) closeImgModal(); });
@@ -1605,12 +1627,14 @@ document.querySelectorAll("#modeSeg button").forEach(btn => {
 $("renderBtn").addEventListener("click", comfyRender);
 $("renderBtn2").addEventListener("click", comfyRender);
 $("cf-rerollSeed").addEventListener("click", () => { comfyCfg.seed = randomSeed(); $("cf-seed").value = comfyCfg.seed; saveComfyCfg(); });
-["cf-url", "cf-aspect", "cf-megapixels", "cf-preset", "cf-seed", "cf-randomize", "cf-cfg", "cf-sampler", "cf-cfgo", "cf-start", "cf-end", "cf-diff", "cf-uncond", "cf-vae", "cf-clip", "cf-cliptype", "cf-batch"].forEach(id => {
+["cf-url", "cf-save", "cf-aspect", "cf-megapixels", "cf-preset", "cf-seed", "cf-randomize", "cf-cfg", "cf-sampler", "cf-cfgo", "cf-start", "cf-end", "cf-diff", "cf-uncond", "cf-vae", "cf-clip", "cf-cliptype", "cf-batch"].forEach(id => {
   const e = $(id); if (e) e.addEventListener("change", readComfyForm);
 });
 
 applyComfyForm();
 updateComfyTarget();
+loadRenderHistory();
+renderGallery();
 applyMode();
 render();
 </script>
