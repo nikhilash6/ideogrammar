@@ -1,0 +1,402 @@
+{
+  "25": {
+    "inputs": {
+      "images": [
+        "98:13",
+        0
+      ]
+    },
+    "class_type": "PreviewImage",
+    "_meta": {
+      "title": "Preview Image"
+    }
+  },
+  "37": {
+    "inputs": {
+      "aspect_ratio": "1:1 (Square)",
+      "megapixels": 2
+    },
+    "class_type": "ResolutionSelector",
+    "_meta": {
+      "title": "Resolution Selector"
+    }
+  },
+  "98:9": {
+    "inputs": {
+      "vae_name": "flux2-vae.safetensors"
+    },
+    "class_type": "VAELoader",
+    "_meta": {
+      "title": "Load VAE"
+    }
+  },
+  "98:10": {
+    "inputs": {
+      "conditioning": [
+        "98:24",
+        0
+      ]
+    },
+    "class_type": "ConditioningZeroOut",
+    "_meta": {
+      "title": "ConditioningZeroOut"
+    }
+  },
+  "98:11": {
+    "inputs": {
+      "width": [
+        "98:31",
+        1
+      ],
+      "height": [
+        "98:32",
+        1
+      ],
+      "batch_size": 1
+    },
+    "class_type": "EmptyFlux2LatentImage",
+    "_meta": {
+      "title": "Empty Flux 2 Latent"
+    }
+  },
+  "98:12": {
+    "inputs": {
+      "noise": [
+        "98:18",
+        0
+      ],
+      "guider": [
+        "98:155",
+        0
+      ],
+      "sampler": [
+        "98:16",
+        0
+      ],
+      "sigmas": [
+        "98:17",
+        0
+      ],
+      "latent_image": [
+        "98:11",
+        0
+      ]
+    },
+    "class_type": "SamplerCustomAdvanced",
+    "_meta": {
+      "title": "SamplerCustomAdvanced"
+    }
+  },
+  "98:13": {
+    "inputs": {
+      "samples": [
+        "98:12",
+        0
+      ],
+      "vae": [
+        "98:9",
+        0
+      ]
+    },
+    "class_type": "VAEDecode",
+    "_meta": {
+      "title": "VAE Decode"
+    }
+  },
+  "98:16": {
+    "inputs": {
+      "sampler_name": "res_multistep"
+    },
+    "class_type": "KSamplerSelect",
+    "_meta": {
+      "title": "KSamplerSelect"
+    }
+  },
+  "98:17": {
+    "inputs": {
+      "steps": [
+        "98:151",
+        1
+      ],
+      "width": [
+        "98:31",
+        1
+      ],
+      "height": [
+        "98:32",
+        1
+      ],
+      "mu": [
+        "98:144",
+        0
+      ],
+      "std": [
+        "98:146",
+        0
+      ]
+    },
+    "class_type": "Ideogram4Scheduler",
+    "_meta": {
+      "title": "Ideogram 4 Scheduler"
+    }
+  },
+  "98:18": {
+    "inputs": {
+      "noise_seed": 453251084258580
+    },
+    "class_type": "RandomNoise",
+    "_meta": {
+      "title": "RandomNoise"
+    }
+  },
+  "98:23": {
+    "inputs": {
+      "unet_name": "ideogram4_fp8_scaled.safetensors",
+      "weight_dtype": "default"
+    },
+    "class_type": "UNETLoader",
+    "_meta": {
+      "title": "Load Diffusion Model"
+    }
+  },
+  "98:24": {
+    "inputs": {
+      "text": "{\n  \"high_level_description\": \"A glossy 1980s retro-tech magazine cover titled NEON BYTE featuring a wedge-shaped PC and glowing CRT monitor amid neon pink and cyan lighting, surrounded by 8-bit icons and vintage photographic grain.\",\n  \"style_description\": {\n    \"aesthetics\": \"1980s retro-tech, high-gloss distressed paper, bold Helvetica typography, neon accents, nostalgic collage composition\",\n    \"lighting\": \"Dramatic pink and cyan studio lighting with a glowing green CRT screen\",\n    \"photo\": \"Soft analog film grain, vintage chromatic aberration, high-gloss magazine print finish\",\n    \"medium\": \"Vintage analog photography / retro magazine cover design\",\n    \"color_palette\": [\n      \"#FF00FF\",\n      \"#00FFFF\",\n      \"#00FF00\",\n      \"#0D0221\",\n      \"#FF3B3B\"\n    ]\n  },\n  \"compositional_deconstruction\": {\n    \"background\": \"Slightly distressed high-gloss paper texture with a faint geometric wireframe grid overlay\",\n    \"elements\": [\n      {\n        \"type\": \"text\",\n        \"bbox\": [\n          150,\n          40,\n          850,\n          160\n        ],\n        \"desc\": \"Bold Helvetica title NEON BYTE centered at the top in white with a subtle cyan drop shadow\",\n        \"color_palette\": [\n          \"#FFFFFF\",\n          \"#00FFFF\",\n          \"#0D0221\"\n        ]\n      },\n      {\n        \"type\": \"subject\",\n        \"bbox\": [\n          220,\n          220,\n          780,\n          780\n        ],\n        \"desc\": \"Futuristic wedge-shaped personal computer with a glowing green CRT monitor and tangled rainbow ribbon cables, bathed in pink and cyan light\",\n        \"color_palette\": [\n          \"#00FF00\",\n          \"#FF00FF\",\n          \"#00FFFF\",\n          \"#1A1A2E\"\n        ]\n      },\n      {\n        \"type\": \"obj\",\n        \"bbox\": [\n          100,\n          400,\n          350,\n          650\n        ],\n        \"desc\": \"Scattered 8-bit pixel art icons and vintage floppy disks forming a nostalgic collage around the left side\",\n        \"color_palette\": [\n          \"#FFD700\",\n          \"#FF00FF\",\n          \"#00FFFF\",\n          \"#2B2B2B\"\n        ]\n      },\n      {\n        \"type\": \"obj\",\n        \"bbox\": [\n          650,\n          350,\n          900,\n          600\n        ],\n        \"desc\": \"Additional geometric wireframe shapes and pixel clusters floating on the right side\",\n        \"color_palette\": [\n          \"#00FFFF\",\n          \"#1A1A2E\",\n          \"#FF00FF\"\n        ]\n      },\n      {\n        \"type\": \"text\",\n        \"bbox\": [\n          750,\n          830,\n          960,\n          920\n        ],\n        \"desc\": \"Neon-styled price tags reading $49.99 in glowing pink and cyan\",\n        \"color_palette\": [\n          \"#FF00FF\",\n          \"#00FFFF\",\n          \"#0D0221\"\n        ]\n      }\n    ]\n  }\n}",
+      "clip": [
+        "98:14",
+        0
+      ]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "CLIP Text Encode (Positive Prompt)"
+    }
+  },
+  "98:14": {
+    "inputs": {
+      "clip_name": "qwen3vl_8b_fp8_scaled.safetensors",
+      "type": "ideogram4",
+      "device": "default"
+    },
+    "class_type": "CLIPLoader",
+    "_meta": {
+      "title": "Load CLIP"
+    }
+  },
+  "98:27": {
+    "inputs": {
+      "value": [
+        "37",
+        0
+      ]
+    },
+    "class_type": "PrimitiveInt",
+    "_meta": {
+      "title": "Int (Width)"
+    }
+  },
+  "98:28": {
+    "inputs": {
+      "value": [
+        "37",
+        1
+      ]
+    },
+    "class_type": "PrimitiveInt",
+    "_meta": {
+      "title": "Int (Height)"
+    }
+  },
+  "98:31": {
+    "inputs": {
+      "expression": "max(((a + 15) // 16) * 16, 256)",
+      "values.a": [
+        "98:27",
+        0
+      ]
+    },
+    "class_type": "ComfyMathExpression",
+    "_meta": {
+      "title": "Math Expression"
+    }
+  },
+  "98:32": {
+    "inputs": {
+      "expression": "max(((a + 15) // 16) * 16, 256)",
+      "values.a": [
+        "98:28",
+        0
+      ]
+    },
+    "class_type": "ComfyMathExpression",
+    "_meta": {
+      "title": "Math Expression"
+    }
+  },
+  "98:144": {
+    "inputs": {
+      "value": [
+        "98:145",
+        0
+      ]
+    },
+    "class_type": "ComfyNumberConvert",
+    "_meta": {
+      "title": "Number Convert"
+    }
+  },
+  "98:145": {
+    "inputs": {
+      "json_string": [
+        "98:148",
+        0
+      ],
+      "key": "mu"
+    },
+    "class_type": "JsonExtractString",
+    "_meta": {
+      "title": "Extract Text from JSON"
+    }
+  },
+  "98:146": {
+    "inputs": {
+      "value": [
+        "98:150",
+        0
+      ]
+    },
+    "class_type": "ComfyNumberConvert",
+    "_meta": {
+      "title": "Number Convert"
+    }
+  },
+  "98:147": {
+    "inputs": {
+      "json_string": "{\n  \"Quality\": {\n    \"num_steps\": 48,\n    \"mu\": 0.0,\n    \"std\": 1.5,\n    \"preset_id\": \"V4_QUALITY_48\"\n  },\n  \"Default\": {\n    \"num_steps\": 20,\n    \"mu\": 0.0,\n    \"std\": 1.75,\n    \"preset_id\": \"V4_DEFAULT_20\"\n  },\n  \"Turbo\": {\n    \"num_steps\": 12,\n    \"mu\": 0.5,\n    \"std\": 1.75,\n    \"preset_id\": \"V4_TURBO_12\"\n  }\n}",
+      "key": [
+        "98:156",
+        0
+      ]
+    },
+    "class_type": "JsonExtractString",
+    "_meta": {
+      "title": "Extract Text from JSON"
+    }
+  },
+  "98:148": {
+    "inputs": {
+      "string": [
+        "98:147",
+        0
+      ],
+      "find": "'",
+      "replace": "\""
+    },
+    "class_type": "StringReplace",
+    "_meta": {
+      "title": "Replace Text"
+    }
+  },
+  "98:149": {
+    "inputs": {
+      "json_string": [
+        "98:148",
+        0
+      ],
+      "key": "num_steps"
+    },
+    "class_type": "JsonExtractString",
+    "_meta": {
+      "title": "Extract Text from JSON"
+    }
+  },
+  "98:150": {
+    "inputs": {
+      "json_string": [
+        "98:148",
+        0
+      ],
+      "key": "std"
+    },
+    "class_type": "JsonExtractString",
+    "_meta": {
+      "title": "Extract Text from JSON"
+    }
+  },
+  "98:151": {
+    "inputs": {
+      "value": [
+        "98:149",
+        0
+      ]
+    },
+    "class_type": "ComfyNumberConvert",
+    "_meta": {
+      "title": "Number Convert"
+    }
+  },
+  "98:154": {
+    "inputs": {
+      "unet_name": "ideogram4_unconditional_fp8_scaled.safetensors",
+      "weight_dtype": "default"
+    },
+    "class_type": "UNETLoader",
+    "_meta": {
+      "title": "Load Diffusion Model"
+    }
+  },
+  "98:155": {
+    "inputs": {
+      "cfg": 7,
+      "model": [
+        "98:157",
+        0
+      ],
+      "positive": [
+        "98:24",
+        0
+      ],
+      "model_negative": [
+        "98:154",
+        0
+      ],
+      "negative": [
+        "98:10",
+        0
+      ]
+    },
+    "class_type": "DualModelGuider",
+    "_meta": {
+      "title": "Dual Model CFG Guider"
+    }
+  },
+  "98:156": {
+    "inputs": {
+      "choice": "Turbo",
+      "index": 2,
+      "option1": "Quality",
+      "option2": "Default",
+      "option3": "Turbo",
+      "option4": ""
+    },
+    "class_type": "CustomCombo",
+    "_meta": {
+      "title": "Custom Combo"
+    }
+  },
+  "98:157": {
+    "inputs": {
+      "cfg": 3,
+      "start_percent": 0.9,
+      "end_percent": 1,
+      "model": [
+        "98:23",
+        0
+      ]
+    },
+    "class_type": "CFGOverride",
+    "_meta": {
+      "title": "CFG Override"
+    }
+  }
+}

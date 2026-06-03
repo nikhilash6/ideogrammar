@@ -3,172 +3,273 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Ideogram 4 Prompt Editor</title>
+<title>Ideogrammar — Ideogram 4 Prompt Editor</title>
 <style>
   :root {
-    --bg: #0d1117;
-    --panel: #161b22;
-    --panel-2: #1c2330;
-    --border: #2d3748;
-    --text: #e6edf3;
-    --muted: #8b949e;
-    --accent: #4A90E2;
-    --accent-2: #7ED321;
-    --danger: #D0021B;
-    --radius: 8px;
+    --bg: #0a0d13;
+    --bg-2: #0e131b;
+    --panel: #121822;
+    --panel-2: #161d29;
+    --elevated: #1a2230;
+    --border: #222c3a;
+    --border-strong: #324155;
+    --text: #e9eef6;
+    --muted: #8b97a8;
+    --faint: #5d6b7e;
+    --accent: #6366f1;
+    --accent-2: #818cf8;
+    --accent-hover: #5457e5;
+    --success: #34d399;
+    --danger: #f43f5e;
+    --r-sm: 7px;
+    --r: 10px;
+    --r-lg: 14px;
+    --shadow: 0 10px 30px -12px rgba(0,0,0,.6);
+    --ring: 0 0 0 3px rgba(99,102,241,.25);
   }
   * { box-sizing: border-box; }
   html, body { margin: 0; height: 100%; }
   body {
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    background: var(--bg);
+    font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: radial-gradient(1200px 600px at 80% -10%, #141d2b 0%, var(--bg) 55%);
     color: var(--text);
     font-size: 14px;
-    display: flex;
-    flex-direction: column;
-    height: 100vh;
-    overflow: hidden;
+    -webkit-font-smoothing: antialiased;
+    display: flex; flex-direction: column;
+    height: 100vh; overflow: hidden;
+    letter-spacing: .1px;
   }
+
+  /* ---------- header ---------- */
   header {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 10px 16px;
-    background: var(--panel);
+    display: flex; align-items: center; gap: 14px;
+    padding: 12px 18px;
+    background: rgba(13,18,26,.7);
+    backdrop-filter: blur(8px);
     border-bottom: 1px solid var(--border);
-    flex-shrink: 0;
+    flex-shrink: 0; z-index: 10;
   }
-  header h1 { font-size: 16px; margin: 0; font-weight: 600; }
-  header .badge {
-    font-size: 11px; color: var(--muted); padding: 2px 8px;
-    border: 1px solid var(--border); border-radius: 20px;
+  .brand { display: flex; align-items: center; gap: 10px; }
+  .brand .logo {
+    width: 28px; height: 28px; border-radius: 8px;
+    background: linear-gradient(135deg, var(--accent), #a855f7);
+    display: grid; place-items: center; color: #fff; font-weight: 800; font-size: 15px;
+    box-shadow: 0 4px 14px -2px rgba(99,102,241,.6);
   }
-  header .spacer { flex: 1; }
-  .layout { flex: 1; display: grid; grid-template-columns: 360px 1fr 420px; min-height: 0; }
+  header h1 { font-size: 15px; margin: 0; font-weight: 600; letter-spacing: .2px; }
+  header h1 span { color: var(--faint); font-weight: 500; }
+  .badge {
+    font-size: 11px; color: var(--muted); padding: 3px 9px;
+    border: 1px solid var(--border); border-radius: 20px; background: var(--panel);
+  }
+  .spacer { flex: 1; }
+
+  /* ---------- layout ---------- */
+  .layout { flex: 1; display: grid; grid-template-columns: 380px 1fr 440px; min-height: 0; }
   .col { overflow-y: auto; padding: 16px; }
   .col.canvas-col {
-    background: var(--panel-2);
-    border-left: 1px solid var(--border);
-    border-right: 1px solid var(--border);
-    display: flex; flex-direction: column; align-items: center;
-    gap: 12px;
+    background: linear-gradient(180deg, var(--bg-2), var(--bg));
+    border-left: 1px solid var(--border); border-right: 1px solid var(--border);
+    display: flex; flex-direction: column; align-items: center; gap: 14px;
   }
-  .col.json-col { background: var(--panel); }
+  .col.json-col { background: var(--bg-2); }
+  .col-title { font-size: 11px; text-transform: uppercase; letter-spacing: .12em; color: var(--faint); font-weight: 700; margin: 2px 2px 12px; }
 
-  h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 0 0 8px; }
-  .section { margin-bottom: 20px; }
-  label { display: block; font-size: 11px; color: var(--muted); margin: 8px 0 3px; }
+  /* ---------- collapsible panels (left) ---------- */
+  .panel {
+    border: 1px solid var(--border); border-radius: var(--r);
+    background: linear-gradient(180deg, var(--panel), var(--panel-2));
+    margin-bottom: 12px; overflow: hidden;
+  }
+  .panel-head {
+    display: flex; align-items: center; gap: 9px;
+    padding: 12px 14px; cursor: pointer; user-select: none;
+  }
+  .panel-head:hover { background: rgba(255,255,255,.02); }
+  .panel-head .chev {
+    color: var(--faint); font-size: 11px; transition: transform .18s ease; flex-shrink: 0;
+    transform: rotate(90deg);
+  }
+  .panel.collapsed .panel-head .chev { transform: rotate(0deg); }
+  .panel-head h2 {
+    font-size: 12px; text-transform: uppercase; letter-spacing: .07em;
+    color: var(--text); margin: 0; flex: 1; font-weight: 600;
+  }
+  .panel-head .count { font-size: 11px; color: var(--faint); background: var(--bg); padding: 1px 8px; border-radius: 20px; border: 1px solid var(--border); }
+  .panel-body { padding: 0 14px 14px; }
+  .panel.collapsed .panel-body { display: none; }
+
+  /* ---------- inputs ---------- */
+  label { display: block; font-size: 11px; color: var(--muted); margin: 10px 0 4px; font-weight: 500; }
+  label:first-child { margin-top: 2px; }
   input[type="text"], input[type="number"], textarea, select {
     width: 100%; background: var(--bg); color: var(--text);
-    border: 1px solid var(--border); border-radius: 6px;
-    padding: 7px 9px; font-size: 13px; font-family: inherit; resize: vertical;
+    border: 1px solid var(--border); border-radius: var(--r-sm);
+    padding: 8px 10px; font-size: 13px; font-family: inherit; resize: vertical;
+    transition: border-color .14s, box-shadow .14s;
   }
-  textarea { line-height: 1.4; }
-  input:focus, textarea:focus, select:focus { outline: none; border-color: var(--accent); }
+  textarea { line-height: 1.45; }
+  input:focus, textarea:focus, select:focus { outline: none; border-color: var(--accent); box-shadow: var(--ring); }
+  select { cursor: pointer; }
 
+  /* ---------- buttons ---------- */
   button {
-    background: var(--panel-2); color: var(--text); border: 1px solid var(--border);
-    border-radius: 6px; padding: 7px 12px; font-size: 13px; cursor: pointer;
-    font-family: inherit; transition: background .12s, border-color .12s;
+    background: var(--elevated); color: var(--text);
+    border: 1px solid var(--border-strong); border-radius: var(--r-sm);
+    padding: 8px 13px; font-size: 13px; font-weight: 500; cursor: pointer;
+    font-family: inherit; transition: all .14s ease; white-space: nowrap;
   }
-  button:hover { background: #232c3d; border-color: #3d4a5e; }
-  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
-  button.primary:hover { background: #3b7bc8; }
-  button.ghost { background: transparent; }
-  button.danger { color: var(--danger); border-color: transparent; background: transparent; padding: 4px 6px; }
-  button.danger:hover { background: rgba(208,2,27,.12); }
+  button:hover { background: #222c3c; border-color: #3c4b60; transform: translateY(-1px); }
+  button:active { transform: translateY(0); }
+  button.primary {
+    background: linear-gradient(135deg, var(--accent), #7c5cf0);
+    border-color: transparent; color: #fff;
+    box-shadow: 0 4px 14px -4px rgba(99,102,241,.7);
+  }
+  button.primary:hover { background: linear-gradient(135deg, var(--accent-hover), #6d4ce6); }
+  button.ghost { background: transparent; border-color: var(--border); }
+  button:disabled { opacity: .5; cursor: not-allowed; transform: none; }
   .btn-row { display: flex; gap: 8px; flex-wrap: wrap; }
+  .iconbtn {
+    width: 28px; height: 28px; padding: 0; display: grid; place-items: center;
+    background: transparent; border: 1px solid transparent; color: var(--muted); font-size: 13px;
+    border-radius: 6px;
+  }
+  .iconbtn:hover { background: var(--elevated); color: var(--text); border-color: var(--border); transform: none; }
+  .iconbtn.del:hover { color: var(--danger); border-color: rgba(244,63,94,.4); background: rgba(244,63,94,.1); }
+  .iconbtn:disabled { opacity: .3; }
 
-  /* color palette editor */
-  .palette { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 4px; }
-  .swatch { position: relative; width: 30px; height: 30px; border-radius: 6px; border: 1px solid var(--border); cursor: pointer; overflow: hidden; }
-  .swatch input[type="color"] { position: absolute; inset: -4px; width: 140%; height: 140%; border: none; padding: 0; cursor: pointer; background: none; }
-  .swatch .x { position: absolute; top: -2px; right: 0px; font-size: 14px; color: #fff; text-shadow: 0 0 3px #000; display: none; line-height: 1; }
+  /* ---------- palette editor ---------- */
+  .palette { display: flex; flex-wrap: wrap; gap: 7px; align-items: center; margin-top: 5px; }
+  .swatch { position: relative; width: 30px; height: 30px; border-radius: 8px; border: 1px solid rgba(255,255,255,.15); cursor: pointer; overflow: hidden; box-shadow: inset 0 0 0 1px rgba(0,0,0,.2); }
+  .swatch input[type="color"] { position: absolute; inset: -6px; width: 150%; height: 150%; border: none; padding: 0; cursor: pointer; background: none; }
+  .swatch .x { position: absolute; top: -1px; right: 1px; font-size: 13px; color: #fff; text-shadow: 0 0 4px #000, 0 0 2px #000; display: none; line-height: 1; font-weight: 700; }
   .swatch:hover .x { display: block; }
-  .add-swatch { width: 30px; height: 30px; border-radius: 6px; border: 1px dashed var(--border); background: transparent; color: var(--muted); font-size: 18px; line-height: 1; padding: 0; display: flex; align-items: center; justify-content: center; }
+  .add-swatch { width: 30px; height: 30px; border-radius: 8px; border: 1px dashed var(--border-strong); background: transparent; color: var(--muted); font-size: 17px; line-height: 1; padding: 0; display: flex; align-items: center; justify-content: center; }
+  .add-swatch:hover { color: var(--text); border-color: var(--accent); transform: none; }
 
-  /* element cards */
+  /* ---------- element cards ---------- */
+  .el-tools { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+  .el-tools .hint { flex: 1; margin: 0; }
   .element {
-    border: 1px solid var(--border); border-radius: var(--radius);
-    margin-bottom: 10px; background: var(--panel);
+    border: 1px solid var(--border); border-radius: var(--r);
+    margin-bottom: 9px; background: var(--panel-2); transition: border-color .14s, box-shadow .14s, opacity .14s;
   }
-  .element.selected { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
-  .element-head {
-    display: flex; align-items: center; gap: 8px; padding: 8px 10px; cursor: pointer;
-    user-select: none;
-  }
-  .element-head .dot { width: 10px; height: 10px; border-radius: 3px; flex-shrink: 0; }
-  .element-head .title { flex: 1; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .element-head .idx { font-size: 11px; color: var(--muted); }
-  .element-body { padding: 0 10px 10px; border-top: 1px solid var(--border); }
-  .element-body.collapsed { display: none; }
-  .bbox-grid { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 6px; }
-  .bbox-grid > div label { margin-top: 4px; }
+  .element.selected { border-color: var(--accent); box-shadow: var(--ring); }
+  .element.dragging { opacity: .4; }
+  .element.drop-above { box-shadow: 0 -2px 0 0 var(--accent); }
+  .element.drop-below { box-shadow: 0 2px 0 0 var(--accent); }
+  .element-head { display: flex; align-items: center; gap: 8px; padding: 9px 10px; user-select: none; }
+  .element-head .grip { cursor: grab; color: var(--faint); font-size: 13px; padding: 0 2px; }
+  .element-head .grip:active { cursor: grabbing; }
+  .element-head .chev { color: var(--faint); font-size: 10px; transition: transform .18s; cursor: pointer; }
+  .element:not(.collapsed) .element-head .chev { transform: rotate(90deg); }
+  .element-head .dot { width: 11px; height: 11px; border-radius: 4px; flex-shrink: 0; box-shadow: 0 0 0 1px rgba(255,255,255,.12); }
+  .element-head .idx { font-size: 11px; color: var(--faint); font-variant-numeric: tabular-nums; min-width: 14px; }
+  .element-head .title { flex: 1; font-size: 13px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .element-head .acts { display: flex; gap: 2px; }
+  .element-body { padding: 4px 12px 12px; }
+  .element.collapsed .element-body { display: none; }
+  .bbox-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 7px; }
+  .bbox-grid label { margin: 0 0 3px; text-align: center; }
   .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 
-  /* canvas */
-  .canvas-wrap { position: relative; width: 100%; max-width: 560px; aspect-ratio: 1/1; background: #fff; border-radius: 6px; overflow: hidden; box-shadow: 0 6px 24px rgba(0,0,0,.4); flex-shrink: 0; }
+  /* ---------- canvas ---------- */
+  .canvas-wrap { position: relative; width: 100%; max-width: 580px; aspect-ratio: 1/1; background: #fafbfc; border-radius: var(--r); overflow: hidden; box-shadow: var(--shadow), 0 0 0 1px var(--border); flex-shrink: 0; }
   #stage { position: absolute; inset: 0; }
-  .box {
-    position: absolute; border: 2px solid var(--accent); background: rgba(74,144,226,.12);
-    cursor: move; font-size: 11px; color: #fff; overflow: visible;
-  }
-  .box .lbl { position: absolute; top: 0; left: 0; background: var(--accent); padding: 1px 5px; font-size: 10px; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; border-radius: 0 0 4px 0; pointer-events: none; }
-  .box.selected { border-width: 2px; z-index: 50; box-shadow: 0 0 0 2px rgba(255,255,255,.5); }
-  .handle { position: absolute; width: 10px; height: 10px; background: #fff; border: 1.5px solid var(--accent); border-radius: 2px; }
+  .box { position: absolute; border: 2px solid var(--accent); background: rgba(99,102,241,.1); cursor: move; font-size: 11px; color: #fff; overflow: visible; border-radius: 2px; transition: box-shadow .1s; }
+  .box .lbl { position: absolute; top: 0; left: 0; padding: 2px 6px; font-size: 10px; font-weight: 600; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; border-radius: 0 0 5px 0; pointer-events: none; }
+  .box.selected { z-index: 50; box-shadow: 0 0 0 2px rgba(255,255,255,.6), 0 6px 18px -6px rgba(0,0,0,.5); }
+  .handle { position: absolute; width: 11px; height: 11px; background: #fff; border: 1.5px solid var(--accent); border-radius: 3px; }
   .handle.se { right: -6px; bottom: -6px; cursor: nwse-resize; }
-  .canvas-meta { font-size: 11px; color: var(--muted); text-align: center; }
-  .grid-line { position: absolute; background: rgba(0,0,0,.06); }
+  .canvas-meta { font-size: 11px; color: var(--muted); text-align: center; line-height: 1.6; }
+  .grid-line { position: absolute; background: rgba(15,23,42,.06); }
+  .toggle { display: flex; align-items: center; gap: 7px; margin: 0; color: var(--muted); font-size: 12px; cursor: pointer; }
+  .toggle input { width: auto; accent-color: var(--accent); }
 
-  /* json */
-  .json-toolbar { display: flex; gap: 6px; margin-bottom: 10px; flex-wrap: wrap; }
+  /* ---------- json ---------- */
+  .json-toolbar { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
   pre#json {
-    background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
-    padding: 12px; font-size: 12px; line-height: 1.5; overflow: auto; margin: 0;
-    font-family: "SF Mono", "Fira Code", Consolas, monospace; white-space: pre; max-height: calc(100vh - 160px);
+    background: var(--bg); border: 1px solid var(--border); border-radius: var(--r);
+    padding: 14px; font-size: 12px; line-height: 1.55; overflow: auto; margin: 0;
+    font-family: "SF Mono", "JetBrains Mono", "Fira Code", Consolas, monospace; white-space: pre;
+    max-height: calc(100vh - 170px); tab-size: 2;
   }
-  .tok-key { color: #79c0ff; }
-  .tok-str { color: #a5d6ff; }
-  .tok-num { color: #f0883e; }
-  .tok-punct { color: var(--muted); }
-  .hint { font-size: 11px; color: var(--muted); margin-top: 4px; line-height: 1.4; }
-  .toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: var(--accent-2); color: #06210a; padding: 8px 16px; border-radius: 20px; font-size: 13px; font-weight: 600; opacity: 0; transition: opacity .2s; pointer-events: none; }
-  .toast.show { opacity: 1; }
-  input[type=file] { display: none; }
-  .col::-webkit-scrollbar, pre::-webkit-scrollbar { width: 10px; height: 10px; }
-  .col::-webkit-scrollbar-thumb, pre::-webkit-scrollbar-thumb { background: #2d3748; border-radius: 6px; }
+  .tok-key { color: var(--accent-2); }
+  .tok-str { color: #7dd3fc; }
+  .tok-num { color: #fbbf77; }
+  .tok-punct { color: var(--faint); }
+  .hint { font-size: 11px; color: var(--faint); margin-top: 6px; line-height: 1.5; }
+  .hint code { background: var(--bg); padding: 1px 5px; border-radius: 4px; border: 1px solid var(--border); color: var(--muted); font-size: 11px; }
 
-  /* modal */
-  .overlay { position: fixed; inset: 0; background: rgba(0,0,0,.6); display: none; align-items: center; justify-content: center; z-index: 100; padding: 20px; }
+  /* ---------- toast ---------- */
+  .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(10px); background: var(--elevated); color: var(--text); border: 1px solid var(--border-strong); padding: 10px 18px; border-radius: 24px; font-size: 13px; font-weight: 500; opacity: 0; transition: opacity .2s, transform .2s; pointer-events: none; box-shadow: var(--shadow); z-index: 200; }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  .toast.ok { border-color: rgba(52,211,153,.5); }
+  .toast.bad { border-color: rgba(244,63,94,.5); }
+
+  input[type=file] { display: none; }
+
+  /* ---------- scrollbars ---------- */
+  .col::-webkit-scrollbar, pre::-webkit-scrollbar { width: 11px; height: 11px; }
+  .col::-webkit-scrollbar-thumb, pre::-webkit-scrollbar-thumb { background: #28323f; border-radius: 8px; border: 3px solid transparent; background-clip: padding-box; }
+  .col::-webkit-scrollbar-thumb:hover, pre::-webkit-scrollbar-thumb:hover { background: #3a4658; background-clip: padding-box; }
+
+  /* ---------- modal ---------- */
+  .overlay { position: fixed; inset: 0; background: rgba(5,8,12,.7); backdrop-filter: blur(4px); display: none; align-items: center; justify-content: center; z-index: 100; padding: 20px; }
   .overlay.show { display: flex; }
-  .modal { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; width: 100%; max-width: 640px; max-height: 90vh; overflow-y: auto; box-shadow: 0 20px 60px rgba(0,0,0,.5); }
-  .modal-head { display: flex; align-items: center; padding: 16px 20px; border-bottom: 1px solid var(--border); }
-  .modal-head h2 { margin: 0; font-size: 15px; text-transform: none; letter-spacing: 0; color: var(--text); flex: 1; }
-  .modal-head .close { background: transparent; border: none; color: var(--muted); font-size: 22px; padding: 0 6px; }
-  .modal-body { padding: 20px; }
-  .modal-foot { padding: 14px 20px; border-top: 1px solid var(--border); display: flex; align-items: center; gap: 10px; }
-  details.cfg { border: 1px solid var(--border); border-radius: 8px; padding: 0 12px; margin-bottom: 16px; background: var(--panel-2); }
-  details.cfg summary { cursor: pointer; padding: 10px 0; font-size: 13px; color: var(--text); user-select: none; }
-  details.cfg[open] summary { border-bottom: 1px solid var(--border); margin-bottom: 10px; }
-  .cfg-inner { padding-bottom: 12px; }
-  .status { font-size: 12px; color: var(--muted); flex: 1; }
+  .modal { background: linear-gradient(180deg, var(--panel), var(--panel-2)); border: 1px solid var(--border-strong); border-radius: var(--r-lg); width: 100%; max-width: 640px; max-height: 90vh; overflow-y: auto; box-shadow: 0 30px 80px -20px rgba(0,0,0,.8); animation: pop .18s ease; }
+  @keyframes pop { from { transform: scale(.97) translateY(6px); opacity: 0; } to { transform: none; opacity: 1; } }
+  .modal-head { display: flex; align-items: center; padding: 18px 22px; border-bottom: 1px solid var(--border); }
+  .modal-head h2 { margin: 0; font-size: 16px; color: var(--text); flex: 1; font-weight: 600; }
+  .modal-head .close { background: transparent; border: none; color: var(--muted); font-size: 22px; padding: 0 8px; }
+  .modal-head .close:hover { color: var(--text); transform: none; }
+  .modal-body { padding: 22px; }
+  .modal-foot { padding: 16px 22px; border-top: 1px solid var(--border); display: flex; align-items: center; gap: 10px; }
+  details.cfg { border: 1px solid var(--border); border-radius: var(--r); padding: 0 14px; margin-bottom: 18px; background: var(--bg); }
+  details.cfg summary { cursor: pointer; padding: 12px 0; font-size: 13px; color: var(--text); user-select: none; font-weight: 500; }
+  details.cfg[open] summary { border-bottom: 1px solid var(--border); margin-bottom: 12px; }
+  .cfg-inner { padding-bottom: 14px; }
+  .status { font-size: 12px; color: var(--muted); flex: 1; line-height: 1.4; }
   .status.err { color: var(--danger); }
-  .status.ok { color: var(--accent-2); }
-  .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 7px; overflow: hidden; }
-  .seg button { border: none; border-radius: 0; padding: 6px 14px; background: var(--bg); }
-  .seg button.active { background: var(--accent); color: #fff; }
-  .spinner { width: 14px; height: 14px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; display: inline-block; animation: spin .7s linear infinite; vertical-align: middle; }
+  .status.ok { color: var(--success); }
+  .seg { display: inline-flex; border: 1px solid var(--border-strong); border-radius: 8px; overflow: hidden; }
+  .seg button { border: none; border-radius: 0; padding: 7px 16px; background: var(--bg); font-weight: 500; }
+  .seg button:hover { transform: none; }
+  .seg button.active { background: linear-gradient(135deg, var(--accent), #7c5cf0); color: #fff; }
+  .spinner { width: 14px; height: 14px; border: 2px solid var(--border-strong); border-top-color: var(--accent-2); border-radius: 50%; display: inline-block; animation: spin .7s linear infinite; vertical-align: middle; margin-right: 4px; }
   @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ---------- comfyui mode ---------- */
+  .comfy-only { display: none; }
+  body.comfy-mode #comfyPanel { display: block; }
+  body.comfy-mode #renderResult { display: flex; }
+  body.comfy-mode #renderBtn { display: inline-block; }
+  .render-panel { flex-direction: column; align-items: stretch; gap: 10px; width: 100%; max-width: 580px; }
+  .render-img-wrap { position: relative; width: 100%; aspect-ratio: 1/1; background: var(--panel); border: 1px solid var(--border); border-radius: var(--r); overflow: hidden; display: grid; place-items: center; box-shadow: var(--shadow), 0 0 0 1px var(--border); }
+  .render-img-wrap img { width: 100%; height: 100%; object-fit: contain; display: none; }
+  .render-placeholder { color: var(--faint); font-size: 12px; text-align: center; padding: 24px; line-height: 1.6; }
+  .progress { width: 100%; height: 6px; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+  .progress > div { height: 100%; width: 0; background: linear-gradient(90deg, var(--accent), var(--accent-2)); transition: width .2s ease; }
+  .render-row { display: flex; align-items: center; gap: 10px; }
 </style>
 </head>
 <body>
 <header>
-  <h1>Ideogram 4 Prompt Editor</h1>
+  <div class="brand">
+    <div class="logo">I</div>
+    <h1>Ideogrammar <span>· Ideogram 4 Prompt Editor</span></h1>
+  </div>
   <span class="badge">1000 × 1000 bbox space</span>
   <div class="spacer"></div>
+  <div class="seg" id="modeSeg" title="Manual = copy the JSON yourself · ComfyUI = render it on your server">
+    <button type="button" data-mode="manual">Manual</button>
+    <button type="button" data-mode="comfy">ComfyUI</button>
+  </div>
   <div class="btn-row">
+    <button class="primary comfy-only" id="renderBtn">🎨 Render</button>
     <button class="primary" id="generateBtn">✨ Generate from text</button>
-    <button id="importBtn">Import JSON</button>
+    <button id="importBtn">Import</button>
     <button id="resetBtn">Reset</button>
     <button id="copyBtn">Copy JSON</button>
     <button id="downloadBtn">Download</button>
@@ -179,63 +280,164 @@
 <div class="layout">
   <!-- LEFT: form -->
   <div class="col" id="formCol">
-    <div class="section">
-      <h2>High level description</h2>
-      <textarea id="hld" rows="3" placeholder="One-sentence description of the whole image…"></textarea>
-    </div>
+    <div class="col-title">Prompt builder</div>
 
-    <div class="section">
-      <h2>Style description</h2>
-      <label>Aesthetics</label>
-      <textarea id="st-aesthetics" rows="2"></textarea>
-      <label>Lighting</label>
-      <textarea id="st-lighting" rows="2"></textarea>
-      <label>Photo</label>
-      <input type="text" id="st-photo">
-      <label>Medium</label>
-      <input type="text" id="st-medium">
-      <label>Color palette</label>
-      <div class="palette" id="st-palette"></div>
-    </div>
-
-    <div class="section">
-      <h2>Background</h2>
-      <textarea id="bg" rows="3"></textarea>
-    </div>
-
-    <div class="section">
-      <div style="display:flex;align-items:center;gap:8px;">
-        <h2 style="margin:0;flex:1;">Elements (<span id="elCount">0</span>)</h2>
-        <button class="primary" id="addEl">+ Add object</button>
+    <section class="panel" data-collapsible>
+      <div class="panel-head"><span class="chev">▶</span><h2>High level description</h2></div>
+      <div class="panel-body">
+        <textarea id="hld" rows="3" placeholder="One-sentence description of the whole image…"></textarea>
       </div>
-      <div class="hint">Click an element header to expand. Drag boxes on the canvas to position them.</div>
-      <div id="elements" style="margin-top:10px;"></div>
-    </div>
+    </section>
+
+    <section class="panel" data-collapsible>
+      <div class="panel-head"><span class="chev">▶</span><h2>Style description</h2></div>
+      <div class="panel-body">
+        <label>Aesthetics</label>
+        <textarea id="st-aesthetics" rows="2"></textarea>
+        <label>Lighting</label>
+        <textarea id="st-lighting" rows="2"></textarea>
+        <label>Photo</label>
+        <input type="text" id="st-photo">
+        <label>Medium</label>
+        <input type="text" id="st-medium">
+        <label>Color palette</label>
+        <div class="palette" id="st-palette"></div>
+      </div>
+    </section>
+
+    <section class="panel" data-collapsible>
+      <div class="panel-head"><span class="chev">▶</span><h2>Background</h2></div>
+      <div class="panel-body">
+        <textarea id="bg" rows="3"></textarea>
+      </div>
+    </section>
+
+    <section class="panel" data-collapsible>
+      <div class="panel-head">
+        <span class="chev">▶</span><h2>Elements</h2>
+        <span class="count" id="elCount">0</span>
+      </div>
+      <div class="panel-body">
+        <div class="el-tools">
+          <span class="hint">Drag the ⠿ handle or use ↑↓ to reorder. Click a row to expand.</span>
+          <button class="primary" id="addEl">+ Add</button>
+        </div>
+        <div id="elements"></div>
+      </div>
+    </section>
+
+    <section class="panel comfy-only" id="comfyPanel">
+      <div class="panel-head"><span class="chev">▶</span><h2>ComfyUI render</h2></div>
+      <div class="panel-body">
+        <label>Server URL <span style="color:var(--faint)">(blank = same origin, e.g. via the proxy)</span></label>
+        <input type="text" id="cf-url" placeholder="http://192.168.2.33:8188 — or blank when using comfy_proxy.py" autocomplete="off">
+        <div class="row2">
+          <div>
+            <label>Aspect ratio</label>
+            <input type="text" id="cf-aspect" list="aspectList" placeholder="1:1 (Square)">
+            <datalist id="aspectList">
+              <option value="1:1 (Square)"></option>
+              <option value="16:9 (Widescreen)"></option>
+              <option value="9:16 (Portrait)"></option>
+              <option value="4:3"></option>
+              <option value="3:4"></option>
+              <option value="3:2"></option>
+              <option value="2:3"></option>
+            </datalist>
+          </div>
+          <div>
+            <label>Megapixels</label>
+            <input type="number" id="cf-megapixels" min="0.1" step="0.1">
+          </div>
+        </div>
+        <label>Quality preset</label>
+        <select id="cf-preset">
+          <option value="Quality">Quality (48 steps)</option>
+          <option value="Default">Default (20 steps)</option>
+          <option value="Turbo">Turbo (12 steps)</option>
+        </select>
+        <label>Seed</label>
+        <div class="row2" style="grid-template-columns:1fr auto auto; align-items:center;">
+          <input type="number" id="cf-seed" min="0" step="1">
+          <button type="button" id="cf-rerollSeed" title="Random seed">🎲</button>
+          <label class="toggle" style="white-space:nowrap;"><input type="checkbox" id="cf-randomize"> random</label>
+        </div>
+        <label>Guidance (CFG)</label>
+        <input type="number" id="cf-cfg" min="0" step="0.1">
+
+        <details class="cfg" style="margin-top:12px;">
+          <summary>Advanced parameters</summary>
+          <div class="cfg-inner">
+            <label>Sampler</label>
+            <input type="text" id="cf-sampler" list="samplerList">
+            <datalist id="samplerList">
+              <option value="res_multistep"></option>
+              <option value="euler"></option>
+              <option value="euler_ancestral"></option>
+              <option value="dpmpp_2m"></option>
+              <option value="dpmpp_2m_sde"></option>
+              <option value="dpmpp_3m_sde"></option>
+              <option value="ddim"></option>
+              <option value="uni_pc"></option>
+            </datalist>
+            <div class="row2">
+              <div><label>CFG override</label><input type="number" id="cf-cfgo" step="0.1"></div>
+              <div><label>Batch size</label><input type="number" id="cf-batch" min="1" step="1"></div>
+            </div>
+            <div class="row2">
+              <div><label>Override start %</label><input type="number" id="cf-start" min="0" max="1" step="0.05"></div>
+              <div><label>Override end %</label><input type="number" id="cf-end" min="0" max="1" step="0.05"></div>
+            </div>
+            <label>Diffusion model (unet)</label>
+            <input type="text" id="cf-diff">
+            <label>Unconditional model (unet)</label>
+            <input type="text" id="cf-uncond">
+            <label>VAE</label>
+            <input type="text" id="cf-vae">
+            <label>CLIP</label>
+            <input type="text" id="cf-clip">
+            <label>CLIP type</label>
+            <input type="text" id="cf-cliptype">
+          </div>
+        </details>
+
+        <div class="btn-row" style="margin-top:14px;">
+          <button id="cf-test">Test connection</button>
+          <button class="primary" id="renderBtn2" style="flex:1;">🎨 Render</button>
+        </div>
+        <div class="render-row" style="margin-top:8px;"><span class="status" id="cf-testStatus"></span></div>
+        <div class="hint">Renders the current prompt on your ComfyUI server using the bundled Ideogram 4 workflow; the result shows in the middle panel.<br><br><b>Browsers block direct cross-origin calls.</b> Two ways around it: either start ComfyUI with <code>--enable-cors-header</code> and point the URL straight at it, or run the included <code>comfy_proxy.py</code> (no ComfyUI flags needed), open the editor at <code>http://localhost:8189/</code>, and leave the URL blank.</div>
+      </div>
+    </section>
   </div>
 
   <!-- MIDDLE: canvas -->
   <div class="col canvas-col">
-    <h2 style="align-self:flex-start;">Layout preview</h2>
-    <div class="canvas-wrap">
-      <div id="stage"></div>
-    </div>
+    <div class="col-title" style="align-self:flex-start;">Layout preview</div>
+    <div class="canvas-wrap"><div id="stage"></div></div>
     <div class="canvas-meta">
-      Origin top-left · X,Y → right,down · 0–1000 each axis.<br>
-      Drag a box to move · drag the corner handle to resize · click to select.
+      Origin top-left · X,Y → right, down · 0–1000 per axis<br>
+      Drag a box to move · drag the corner to resize · click to select
     </div>
     <div class="btn-row">
-      <label style="display:flex;align-items:center;gap:6px;margin:0;color:var(--text);font-size:12px;cursor:pointer;">
-        <input type="checkbox" id="gridToggle" checked style="width:auto;"> Show grid
-      </label>
-      <label style="display:flex;align-items:center;gap:6px;margin:0;color:var(--text);font-size:12px;cursor:pointer;">
-        <input type="checkbox" id="labelToggle" checked style="width:auto;"> Show labels
-      </label>
+      <label class="toggle"><input type="checkbox" id="gridToggle" checked> Show grid</label>
+      <label class="toggle"><input type="checkbox" id="labelToggle" checked> Show labels</label>
+    </div>
+
+    <div class="render-panel comfy-only" id="renderResult">
+      <div class="col-title" style="align-self:flex-start; margin-top:6px;">Rendered result</div>
+      <div class="render-img-wrap" id="renderImgWrap">
+        <div class="render-placeholder" id="renderPlaceholder">Set parameters on the left and press <b>Render</b>.</div>
+        <img id="renderImg" alt="rendered result">
+      </div>
+      <div class="progress"><div id="renderBar"></div></div>
+      <div class="render-row"><span class="status" id="renderStatus"></span></div>
     </div>
   </div>
 
   <!-- RIGHT: json -->
   <div class="col json-col">
-    <h2>JSON output</h2>
+    <div class="col-title">JSON output</div>
     <div class="json-toolbar">
       <button id="copyBtn2" class="primary">Copy</button>
       <button id="downloadBtn2">Download .json</button>
@@ -260,19 +462,19 @@
             <button type="button" data-p="openrouter">OpenRouter</button>
             <button type="button" data-p="local">Local (llama.cpp)</button>
           </div>
-          <label>Base URL <span style="color:var(--muted)">(OpenAI-compatible, ends in /v1)</span></label>
+          <label>Base URL <span style="color:var(--faint)">(OpenAI-compatible, ends in /v1)</span></label>
           <input type="text" id="cfgBaseUrl" placeholder="https://openrouter.ai/api/v1">
-          <label>API key <span style="color:var(--muted)">(required for OpenRouter; usually blank for local)</span></label>
+          <label>API key <span style="color:var(--faint)">(required for OpenRouter; usually blank for local)</span></label>
           <input type="text" id="cfgApiKey" placeholder="sk-or-..." autocomplete="off">
           <label>Model</label>
           <input type="text" id="cfgModel" placeholder="anthropic/claude-3.5-sonnet">
-          <div class="hint">Settings are saved in this browser only (localStorage). For local <code>llama-server</code>, run it with <code>--port 8081</code> and start it with CORS enabled; base URL is then <code>http://&lt;host&gt;:8081/v1</code>.</div>
+          <div class="hint">Settings are saved in this browser only (localStorage). For local <code>llama-server</code>, run it with <code>--port 8081</code> and CORS enabled; base URL is then <code>http://&lt;host&gt;:8081/v1</code>.</div>
         </div>
       </details>
 
       <label>Describe the image you want</label>
       <textarea id="genPrompt" rows="5" placeholder="e.g. A bold 80s synthwave concert poster for a band called NEON TIDE, with a retro sports car driving toward a setting sun, palm trees, and a grid floor. Big chrome title at the top, tour dates at the bottom."></textarea>
-      <div class="hint">The model returns the full schema (style, background, and positioned objects). You can edit everything afterwards.</div>
+      <div class="hint">The model returns the full schema (style, background, positioned objects). You can edit everything afterwards. Press ⌘/Ctrl + Enter to generate.</div>
     </div>
     <div class="modal-foot">
       <span class="status" id="genStatus"></span>
@@ -290,7 +492,7 @@
 /* ------------------------------------------------------------------ */
 /*  State                                                             */
 /* ------------------------------------------------------------------ */
-const COORD = 1000; // bbox coordinate space
+const COORD = 1000;
 let uid = 1;
 
 function emptyElement(seed = {}) {
@@ -300,7 +502,7 @@ function emptyElement(seed = {}) {
     bbox: seed.bbox ?? [100, 100, 500, 500],
     desc: seed.desc ?? "",
     color_palette: seed.color_palette ?? ["#FFFFFF"],
-    _collapsed: false
+    _collapsed: seed._collapsed ?? true
   };
 }
 
@@ -312,11 +514,11 @@ function defaultState() {
       lighting: "soft, even studio lighting with gentle, diffused shadows",
       photo: "high-resolution product photography, 50mm lens, shallow depth of field",
       medium: "digital photography",
-      color_palette: ["#F5F5F5", "#1A1A1A", "#4A90E2"]
+      color_palette: ["#F5F5F5", "#1A1A1A", "#6366F1"]
     },
     background: "A smooth, seamless light-grey studio backdrop with a subtle top-to-bottom gradient.",
     elements: [
-      emptyElement({ type: "subject", bbox: [320, 300, 680, 760], desc: "The main product, centered in the frame and sharply in focus.", color_palette: ["#4A90E2", "#FFFFFF"] }),
+      emptyElement({ type: "subject", bbox: [320, 300, 680, 760], desc: "The main product, centered in the frame and sharply in focus.", color_palette: ["#6366F1", "#FFFFFF"] }),
       emptyElement({ type: "text", bbox: [200, 90, 800, 210], desc: "Bold sans-serif title text near the top reading 'YOUR TITLE HERE'.", color_palette: ["#1A1A1A"] })
     ]
   };
@@ -325,10 +527,7 @@ function defaultState() {
 let state = defaultState();
 let selectedId = null;
 
-/* ------------------------------------------------------------------ */
-/*  Element box colors (cycled for the canvas)                        */
-/* ------------------------------------------------------------------ */
-const BOX_COLORS = ["#4A90E2", "#D0021B", "#7ED321", "#F5A623", "#BD10E0", "#50E3C2", "#B8E986", "#FF007F", "#9013FE", "#417505"];
+const BOX_COLORS = ["#6366F1", "#F43F5E", "#34D399", "#F59E0B", "#A855F7", "#06B6D4", "#84CC16", "#EC4899", "#3B82F6", "#F97316"];
 function boxColor(i) { return BOX_COLORS[i % BOX_COLORS.length]; }
 
 /* ------------------------------------------------------------------ */
@@ -354,7 +553,6 @@ function renderForm() {
   $("elCount").textContent = state.elements.length;
 }
 
-/* Palette editor — reusable */
 function renderPalette(container, arr) {
   container.innerHTML = "";
   arr.forEach((color, i) => {
@@ -366,18 +564,13 @@ function renderPalette(container, arr) {
     inp.value = normalizeHex(color);
     inp.addEventListener("input", () => { arr[i] = inp.value.toUpperCase(); sw.style.background = inp.value; renderCanvas(); renderJSON(); });
     const x = document.createElement("span");
-    x.className = "x";
-    x.textContent = "×";
-    x.title = "Remove color";
+    x.className = "x"; x.textContent = "×"; x.title = "Remove color";
     x.addEventListener("click", (e) => { e.preventDefault(); e.stopPropagation(); arr.splice(i, 1); render(); });
     sw.appendChild(inp); sw.appendChild(x);
     container.appendChild(sw);
   });
   const add = document.createElement("button");
-  add.className = "add-swatch";
-  add.type = "button";
-  add.textContent = "+";
-  add.title = "Add color";
+  add.className = "add-swatch"; add.type = "button"; add.textContent = "+"; add.title = "Add color";
   add.addEventListener("click", () => { arr.push("#FFFFFF"); render(); });
   container.appendChild(add);
 }
@@ -395,76 +588,108 @@ function renderElements() {
   wrap.innerHTML = "";
   state.elements.forEach((el, i) => {
     const card = document.createElement("div");
-    card.className = "element" + (el._id === selectedId ? " selected" : "");
+    card.className = "element" + (el._id === selectedId ? " selected" : "") + (el._collapsed ? " collapsed" : "");
+    card.dataset.index = i;
 
+    /* ---- header ---- */
     const head = document.createElement("div");
     head.className = "element-head";
-    head.innerHTML = `
-      <span class="dot" style="background:${boxColor(i)}"></span>
-      <span class="idx">#${i + 1}</span>
-      <span class="title">${escapeHtml(el.desc) || "<em style='color:var(--muted)'>empty object</em>"}</span>
-    `;
-    const del = document.createElement("button");
-    del.className = "danger";
-    del.textContent = "Delete";
-    del.title = "Remove element";
-    del.addEventListener("click", (e) => { e.stopPropagation(); removeElement(el._id); });
-    head.appendChild(del);
-    head.addEventListener("click", () => { el._collapsed = !el._collapsed; selectedId = el._id; render(); });
+
+    const grip = document.createElement("span");
+    grip.className = "grip"; grip.textContent = "⠿"; grip.title = "Drag to reorder";
+    grip.draggable = true;
+
+    const chev = document.createElement("span");
+    chev.className = "chev"; chev.textContent = "▶";
+
+    const dot = document.createElement("span");
+    dot.className = "dot"; dot.style.background = boxColor(i);
+
+    const idx = document.createElement("span");
+    idx.className = "idx"; idx.textContent = i + 1;
+
+    const title = document.createElement("span");
+    title.className = "title";
+    title.innerHTML = escapeHtml(el.desc) || "<em style='color:var(--faint)'>empty object</em>";
+
+    const acts = document.createElement("div");
+    acts.className = "acts";
+    const up = iconBtn("↑", "Move up", () => moveElement(i, i - 1));
+    up.disabled = i === 0;
+    const down = iconBtn("↓", "Move down", () => moveElement(i, i + 1));
+    down.disabled = i === state.elements.length - 1;
+    const del = iconBtn("🗑", "Delete", () => removeElement(el._id));
+    del.classList.add("del");
+    acts.append(up, down, del);
+
+    const toggle = () => { el._collapsed = !el._collapsed; selectedId = el._id; render(); };
+    chev.addEventListener("click", (e) => { e.stopPropagation(); toggle(); });
+    title.addEventListener("click", (e) => { e.stopPropagation(); toggle(); });
+    head.addEventListener("click", () => { selectedId = el._id; renderElements(); renderCanvas(); });
+
+    head.append(grip, chev, dot, idx, title, acts);
     card.appendChild(head);
 
-    const body = document.createElement("div");
-    body.className = "element-body" + (el._collapsed ? " collapsed" : "");
-
-    // type
-    const typeRow = document.createElement("div");
-    typeRow.className = "row2";
-    typeRow.innerHTML = `<div><label>Type</label></div><div></div>`;
-    const typeSel = document.createElement("select");
-    ["obj", "text", "bg", "subject", "logo"].forEach(t => {
-      const o = document.createElement("option"); o.value = t; o.textContent = t;
-      if (t === el.type) o.selected = true; typeSel.appendChild(o);
+    /* ---- drag & drop reorder ---- */
+    grip.addEventListener("dragstart", (e) => { dragFrom = i; e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", String(i)); card.classList.add("dragging"); });
+    grip.addEventListener("dragend", () => { card.classList.remove("dragging"); clearDropMarkers(); dragFrom = null; });
+    card.addEventListener("dragover", (e) => {
+      if (dragFrom === null) return;
+      e.preventDefault();
+      const r = card.getBoundingClientRect();
+      const below = (e.clientY - r.top) > r.height / 2;
+      clearDropMarkers();
+      card.classList.add(below ? "drop-below" : "drop-above");
     });
-    // allow custom
-    if (!["obj", "text", "bg", "subject", "logo"].includes(el.type)) {
-      const o = document.createElement("option"); o.value = el.type; o.textContent = el.type; o.selected = true; typeSel.appendChild(o);
-    }
-    typeSel.addEventListener("change", () => { el.type = typeSel.value; renderJSON(); });
-    typeRow.children[0].appendChild(typeSel);
-    body.appendChild(typeRow);
+    card.addEventListener("dragleave", () => card.classList.remove("drop-above", "drop-below"));
+    card.addEventListener("drop", (e) => {
+      if (dragFrom === null) return;
+      e.preventDefault();
+      const r = card.getBoundingClientRect();
+      const below = (e.clientY - r.top) > r.height / 2;
+      let to = i + (below ? 1 : 0);
+      if (dragFrom < to) to--;
+      moveElement(dragFrom, to);
+    });
 
-    // desc
+    /* ---- body ---- */
+    const body = document.createElement("div");
+    body.className = "element-body";
+
+    const typeLabel = document.createElement("label"); typeLabel.textContent = "Type";
+    body.appendChild(typeLabel);
+    const typeSel = document.createElement("select");
+    const types = ["obj", "subject", "text", "logo", "bg"];
+    types.forEach(t => { const o = document.createElement("option"); o.value = t; o.textContent = t; if (t === el.type) o.selected = true; typeSel.appendChild(o); });
+    if (!types.includes(el.type)) { const o = document.createElement("option"); o.value = el.type; o.textContent = el.type; o.selected = true; typeSel.appendChild(o); }
+    typeSel.addEventListener("change", () => { el.type = typeSel.value; renderJSON(); });
+    body.appendChild(typeSel);
+
     const descLabel = document.createElement("label"); descLabel.textContent = "Description";
     body.appendChild(descLabel);
     const desc = document.createElement("textarea");
     desc.rows = 3; desc.value = el.desc;
-    desc.addEventListener("input", () => { el.desc = desc.value; renderElementTitle(card, el); renderCanvas(); renderJSON(); });
+    desc.addEventListener("input", () => { el.desc = desc.value; title.innerHTML = escapeHtml(el.desc) || "<em style='color:var(--faint)'>empty object</em>"; renderCanvas(); renderJSON(); });
     body.appendChild(desc);
 
-    // bbox
     const bboxLabel = document.createElement("label"); bboxLabel.textContent = "Bounding box  [x1, y1, x2, y2]  (0–1000)";
     body.appendChild(bboxLabel);
     const grid = document.createElement("div");
     grid.className = "bbox-grid";
     ["x1", "y1", "x2", "y2"].forEach((name, k) => {
       const cell = document.createElement("div");
-      const l = document.createElement("label"); l.textContent = name; l.style.marginTop = "0";
+      const l = document.createElement("label"); l.textContent = name;
       const inp = document.createElement("input");
       inp.type = "number"; inp.min = 0; inp.max = COORD; inp.value = el.bbox[k];
-      inp.addEventListener("input", () => {
-        let v = clamp(parseInt(inp.value || "0", 10), 0, COORD);
-        el.bbox[k] = v; renderCanvas(); renderJSON();
-      });
-      cell.appendChild(l); cell.appendChild(inp);
+      inp.addEventListener("input", () => { el.bbox[k] = clamp(parseInt(inp.value || "0", 10), 0, COORD); renderCanvas(); renderJSON(); });
+      cell.append(l, inp);
       grid.appendChild(cell);
     });
     body.appendChild(grid);
 
-    // palette
     const palLabel = document.createElement("label"); palLabel.textContent = "Color palette";
     body.appendChild(palLabel);
-    const pal = document.createElement("div");
-    pal.className = "palette";
+    const pal = document.createElement("div"); pal.className = "palette";
     renderPalette(pal, el.color_palette);
     body.appendChild(pal);
 
@@ -473,13 +698,26 @@ function renderElements() {
   });
 }
 
-function renderElementTitle(card, el) {
-  const t = card.querySelector(".title");
-  if (t) t.innerHTML = escapeHtml(el.desc) || "<em style='color:var(--muted)'>empty object</em>";
+function iconBtn(label, title, onClick) {
+  const b = document.createElement("button");
+  b.className = "iconbtn"; b.textContent = label; b.title = title;
+  b.addEventListener("click", (e) => { e.stopPropagation(); onClick(); });
+  return b;
+}
+
+let dragFrom = null;
+function clearDropMarkers() { document.querySelectorAll(".element.drop-above,.element.drop-below").forEach(c => c.classList.remove("drop-above", "drop-below")); }
+
+function moveElement(from, to) {
+  to = clamp(to, 0, state.elements.length - 1);
+  if (from === to || from < 0 || from >= state.elements.length) { clearDropMarkers(); return; }
+  const [item] = state.elements.splice(from, 1);
+  state.elements.splice(to, 0, item);
+  render();
 }
 
 /* ------------------------------------------------------------------ */
-/*  Canvas with draggable / resizable boxes                          */
+/*  Canvas                                                            */
 /* ------------------------------------------------------------------ */
 function renderCanvas() {
   const stage = $("stage");
@@ -510,18 +748,17 @@ function renderCanvas() {
     box.style.height = (h / COORD * 100) + "%";
     const col = boxColor(i);
     box.style.borderColor = col;
-    box.style.background = hexToRgba(col, 0.12);
+    box.style.background = hexToRgba(col, 0.1);
 
     if (showLabels) {
       const lbl = document.createElement("div");
       lbl.className = "lbl"; lbl.style.background = col;
-      lbl.textContent = `#${i + 1} ${shortDesc(el.desc)}`;
+      lbl.textContent = `${i + 1} · ${shortDesc(el.desc)}`;
       box.appendChild(lbl);
     }
 
     const handle = document.createElement("div");
-    handle.className = "handle se";
-    handle.style.borderColor = col;
+    handle.className = "handle se"; handle.style.borderColor = col;
     box.appendChild(handle);
 
     box.addEventListener("mousedown", (e) => startDrag(e, el, "move"));
@@ -536,13 +773,8 @@ let drag = null;
 function startDrag(e, el, mode) {
   e.preventDefault();
   selectElement(el._id);
-  const stage = $("stage");
-  const rect = stage.getBoundingClientRect();
-  drag = {
-    el, mode, rect,
-    startX: e.clientX, startY: e.clientY,
-    orig: el.bbox.slice()
-  };
+  const rect = $("stage").getBoundingClientRect();
+  drag = { el, mode, rect, startX: e.clientX, startY: e.clientY, orig: el.bbox.slice() };
   window.addEventListener("mousemove", onDrag);
   window.addEventListener("mouseup", endDrag);
 }
@@ -553,49 +785,38 @@ function onDrag(e) {
   const dx = (e.clientX - drag.startX) / rect.width * COORD;
   const dy = (e.clientY - drag.startY) / rect.height * COORD;
   let [x1, y1, x2, y2] = orig;
-  // normalize so x1<x2, y1<y2 first
   let nx1 = Math.min(x1, x2), nx2 = Math.max(x1, x2);
   let ny1 = Math.min(y1, y2), ny2 = Math.max(y1, y2);
   if (mode === "move") {
     const w = nx2 - nx1, h = ny2 - ny1;
-    nx1 = clamp(nx1 + dx, 0, COORD - w);
-    ny1 = clamp(ny1 + dy, 0, COORD - h);
+    nx1 = clamp(nx1 + dx, 0, COORD - w); ny1 = clamp(ny1 + dy, 0, COORD - h);
     nx2 = nx1 + w; ny2 = ny1 + h;
   } else {
-    nx2 = clamp(nx2 + dx, nx1 + 5, COORD);
-    ny2 = clamp(ny2 + dy, ny1 + 5, COORD);
+    nx2 = clamp(nx2 + dx, nx1 + 5, COORD); ny2 = clamp(ny2 + dy, ny1 + 5, COORD);
   }
   el.bbox = [Math.round(nx1), Math.round(ny1), Math.round(nx2), Math.round(ny2)];
-  renderCanvas(); renderJSONThrottled();
-  syncBboxInputs(el);
+  renderCanvas(); renderJSONThrottled(); syncBboxInputs(el);
 }
 
 function endDrag() {
   drag = null;
   window.removeEventListener("mousemove", onDrag);
   window.removeEventListener("mouseup", endDrag);
-  renderJSON();
-  renderElements();
+  renderJSON(); renderElements();
 }
 
 function syncBboxInputs(el) {
-  // update the number inputs for the dragged element live, if expanded
-  const cards = document.querySelectorAll(".element");
   const idx = state.elements.indexOf(el);
-  const card = cards[idx];
+  const card = document.querySelectorAll(".element")[idx];
   if (!card) return;
   const inputs = card.querySelectorAll(".bbox-grid input");
   if (inputs.length === 4) el.bbox.forEach((v, k) => { if (document.activeElement !== inputs[k]) inputs[k].value = v; });
 }
 
-function selectElement(id) {
-  selectedId = id;
-  renderCanvas();
-  renderElements();
-}
+function selectElement(id) { selectedId = id; renderCanvas(); renderElements(); }
 
 /* ------------------------------------------------------------------ */
-/*  JSON output                                                       */
+/*  JSON                                                              */
 /* ------------------------------------------------------------------ */
 function buildJSON() {
   return {
@@ -625,21 +846,12 @@ function renderJSONThrottled() {
   jsonThrottle = requestAnimationFrame(() => { jsonThrottle = null; renderJSON(); });
 }
 
-function renderJSON() {
-  const obj = buildJSON();
-  const str = JSON.stringify(obj, null, 2);
-  $("json").innerHTML = highlight(str);
-}
+function renderJSON() { $("json").innerHTML = highlight(JSON.stringify(buildJSON(), null, 2)); }
 
 function highlight(json) {
-  const esc = escapeHtml(json);
-  return esc.replace(/("(\\.|[^"\\])*")(\s*:)?|\b(-?\d+\.?\d*)\b|([{}\[\],])/g,
+  return escapeHtml(json).replace(/("(\\.|[^"\\])*")(\s*:)?|\b(-?\d+\.?\d*)\b|([{}\[\],])/g,
     (m, str, _g2, colon, num, punct) => {
-      if (str !== undefined) {
-        return colon
-          ? `<span class="tok-key">${str}</span><span class="tok-punct">${colon}</span>`
-          : `<span class="tok-str">${str}</span>`;
-      }
+      if (str !== undefined) return colon ? `<span class="tok-key">${str}</span><span class="tok-punct">${colon}</span>` : `<span class="tok-str">${str}</span>`;
       if (num !== undefined) return `<span class="tok-num">${num}</span>`;
       if (punct !== undefined) return `<span class="tok-punct">${punct}</span>`;
       return m;
@@ -650,13 +862,11 @@ function highlight(json) {
 /*  Actions                                                           */
 /* ------------------------------------------------------------------ */
 function addElement() {
-  const el = emptyElement({ desc: "", bbox: [200, 200, 600, 600], color_palette: ["#FFFFFF"] });
+  const el = emptyElement({ desc: "", bbox: [200, 200, 600, 600], color_palette: ["#FFFFFF"], _collapsed: false });
   state.elements.push(el);
   selectedId = el._id;
   render();
-  // scroll new element into view
-  const wrap = $("elements");
-  wrap.lastChild?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  $("elements").lastChild?.scrollIntoView({ behavior: "smooth", block: "nearest" });
 }
 
 function removeElement(id) {
@@ -665,32 +875,45 @@ function removeElement(id) {
   render();
 }
 
-function doCopy() {
+async function doCopy() {
   const str = JSON.stringify(buildJSON(), null, 2);
-  navigator.clipboard.writeText(str).then(() => toast("Copied to clipboard ✓"))
-    .catch(() => toast("Copy failed — select & copy manually"));
+  const ok = await copyText(str);
+  toast(ok ? "Copied to clipboard ✓" : "Copy failed — select the JSON manually", ok ? "ok" : "bad");
+}
+
+// Works on http:// LAN (insecure context) where navigator.clipboard is unavailable.
+async function copyText(text) {
+  if (navigator.clipboard && window.isSecureContext) {
+    try { await navigator.clipboard.writeText(text); return true; } catch (_) {}
+  }
+  try {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.setAttribute("readonly", "");
+    ta.style.position = "fixed"; ta.style.top = "0"; ta.style.left = "0"; ta.style.opacity = "0";
+    document.body.appendChild(ta);
+    ta.focus(); ta.select(); ta.setSelectionRange(0, text.length);
+    const ok = document.execCommand("copy");
+    document.body.removeChild(ta);
+    return ok;
+  } catch (_) { return false; }
 }
 
 function doDownload() {
-  const str = JSON.stringify(buildJSON(), null, 2);
-  const blob = new Blob([str], { type: "application/json" });
+  const blob = new Blob([JSON.stringify(buildJSON(), null, 2)], { type: "application/json" });
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
   a.download = "ideogram-prompt.json";
   a.click();
   URL.revokeObjectURL(a.href);
-  toast("Downloaded ✓");
+  toast("Downloaded ✓", "ok");
 }
 
 function doImport(file) {
   const reader = new FileReader();
   reader.onload = () => {
-    try {
-      loadFromJSON(JSON.parse(reader.result));
-      toast("Imported ✓");
-    } catch (err) {
-      toast("Invalid JSON: " + err.message);
-    }
+    try { loadFromJSON(JSON.parse(reader.result)); toast("Imported ✓", "ok"); }
+    catch (err) { toast("Invalid JSON: " + err.message, "bad"); }
   };
   reader.readAsText(file);
 }
@@ -701,10 +924,8 @@ function loadFromJSON(data) {
   state = {
     high_level_description: data.high_level_description || "",
     style_description: {
-      aesthetics: sd.aesthetics || "",
-      lighting: sd.lighting || "",
-      photo: sd.photo || "",
-      medium: sd.medium || "",
+      aesthetics: sd.aesthetics || "", lighting: sd.lighting || "",
+      photo: sd.photo || "", medium: sd.medium || "",
       color_palette: Array.isArray(sd.color_palette) ? sd.color_palette.map(normalizeUpper) : []
     },
     background: cd.background || "",
@@ -727,17 +948,13 @@ function normalizeUpper(c) { return typeof c === "string" ? c.toUpperCase() : "#
 function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
 function escapeHtml(s) { return String(s).replace(/[&<>]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c])); }
 function shortDesc(d) { d = (d || "").trim(); return d.length > 26 ? d.slice(0, 26) + "…" : (d || "object"); }
-function hexToRgba(hex, a) {
-  hex = normalizeHex(hex);
-  const n = parseInt(hex.slice(1), 16);
-  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
-}
+function hexToRgba(hex, a) { hex = normalizeHex(hex); const n = parseInt(hex.slice(1), 16); return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`; }
 let toastTimer;
-function toast(msg) {
+function toast(msg, cls) {
   const t = $("toast");
-  t.textContent = msg; t.classList.add("show");
+  t.textContent = msg; t.className = "toast show" + (cls ? " " + cls : "");
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => t.classList.remove("show"), 1800);
+  toastTimer = setTimeout(() => t.classList.remove("show"), 1900);
 }
 
 /* ------------------------------------------------------------------ */
@@ -752,9 +969,7 @@ const PROVIDER_DEFAULTS = {
 function loadCfg() {
   let cfg;
   try { cfg = JSON.parse(localStorage.getItem(CFG_KEY)); } catch (_) {}
-  if (!cfg || typeof cfg !== "object") {
-    cfg = { provider: "openrouter", baseUrl: PROVIDER_DEFAULTS.openrouter.baseUrl, apiKey: "", model: PROVIDER_DEFAULTS.openrouter.model };
-  }
+  if (!cfg || typeof cfg !== "object") cfg = { provider: "openrouter", baseUrl: PROVIDER_DEFAULTS.openrouter.baseUrl, apiKey: "", model: PROVIDER_DEFAULTS.openrouter.model };
   return cfg;
 }
 function saveCfg(cfg) { localStorage.setItem(CFG_KEY, JSON.stringify(cfg)); }
@@ -764,20 +979,13 @@ function applyCfgToForm() {
   $("cfgBaseUrl").value = cfg.baseUrl || "";
   $("cfgApiKey").value = cfg.apiKey || "";
   $("cfgModel").value = cfg.model || "";
-  document.querySelectorAll("#providerSeg button").forEach(b =>
-    b.classList.toggle("active", b.dataset.p === cfg.provider));
-  // open settings automatically if no key on a provider that needs one
+  document.querySelectorAll("#providerSeg button").forEach(b => b.classList.toggle("active", b.dataset.p === cfg.provider));
   if (cfg.provider === "openrouter" && !cfg.apiKey) $("cfg").open = true;
 }
 
 function readCfgFromForm() {
   const provider = document.querySelector("#providerSeg button.active")?.dataset.p || "openrouter";
-  const cfg = {
-    provider,
-    baseUrl: $("cfgBaseUrl").value.trim().replace(/\/+$/, ""),
-    apiKey: $("cfgApiKey").value.trim(),
-    model: $("cfgModel").value.trim()
-  };
+  const cfg = { provider, baseUrl: $("cfgBaseUrl").value.trim().replace(/\/+$/, ""), apiKey: $("cfgApiKey").value.trim(), model: $("cfgModel").value.trim() };
   saveCfg(cfg);
   return cfg;
 }
@@ -822,34 +1030,26 @@ async function runGeneration() {
   const userPrompt = $("genPrompt").value.trim();
   if (!userPrompt) { setGenStatus("Describe the image first.", "err"); return; }
   if (!cfg.baseUrl) { setGenStatus("Set a Base URL in settings.", "err"); $("cfg").open = true; return; }
-  if (!cfg.model)   { setGenStatus("Set a Model name in settings.", "err"); $("cfg").open = true; return; }
+  if (!cfg.model) { setGenStatus("Set a Model name in settings.", "err"); $("cfg").open = true; return; }
   if (cfg.provider === "openrouter" && !cfg.apiKey) { setGenStatus("OpenRouter needs an API key.", "err"); $("cfg").open = true; return; }
 
   generating = true;
   $("genRun").disabled = true;
-  setGenStatus('<span class="spinner"></span> Contacting model…', "");
+  setGenStatus('<span class="spinner"></span>Contacting model…', "");
 
   const headers = { "Content-Type": "application/json" };
   if (cfg.apiKey) headers["Authorization"] = "Bearer " + cfg.apiKey;
-  if (cfg.provider === "openrouter") {
-    headers["HTTP-Referer"] = location.origin;
-    headers["X-Title"] = "Ideogram 4 Prompt Editor";
-  }
+  if (cfg.provider === "openrouter") { headers["HTTP-Referer"] = location.origin; headers["X-Title"] = "Ideogrammar"; }
 
   const body = {
     model: cfg.model,
-    messages: [
-      { role: "system", content: SYSTEM_PROMPT },
-      { role: "user", content: "Description:\n" + userPrompt }
-    ],
+    messages: [{ role: "system", content: SYSTEM_PROMPT }, { role: "user", content: "Description:\n" + userPrompt }],
     temperature: 0.7,
     response_format: { type: "json_object" }
   };
 
   try {
-    const res = await fetch(cfg.baseUrl + "/chat/completions", {
-      method: "POST", headers, body: JSON.stringify(body)
-    });
+    const res = await fetch(cfg.baseUrl + "/chat/completions", { method: "POST", headers, body: JSON.stringify(body) });
     if (!res.ok) {
       let detail = "";
       try { const j = await res.json(); detail = j.error?.message || JSON.stringify(j.error || j); }
@@ -863,14 +1063,11 @@ async function runGeneration() {
     if (!parsed) throw new Error("Could not parse JSON from the model's reply.");
     loadFromJSON(parsed);
     setGenStatus("Generated ✓", "ok");
-    toast("Setup generated ✓");
+    toast("Setup generated ✓", "ok");
     setTimeout(closeGenModal, 600);
   } catch (err) {
     let msg = err.message || String(err);
-    if (err instanceof TypeError) {
-      msg = "Network/CORS error reaching " + cfg.baseUrl +
-            ". Check the URL, that the server is running, and that CORS is allowed.";
-    }
+    if (err instanceof TypeError) msg = "Network/CORS error reaching " + cfg.baseUrl + ". Check the URL, that the server is running, and that CORS is allowed.";
     setGenStatus(msg, "err");
   } finally {
     generating = false;
@@ -878,33 +1075,19 @@ async function runGeneration() {
   }
 }
 
-// Pull a JSON object out of a model reply (handles ```json fences / stray prose).
 function extractJSON(text) {
   if (typeof text !== "string") return null;
   let t = text.trim();
   const fence = t.match(/```(?:json)?\s*([\s\S]*?)```/i);
   if (fence) t = fence[1].trim();
   try { return JSON.parse(t); } catch (_) {}
-  const start = t.indexOf("{");
-  const end = t.lastIndexOf("}");
-  if (start !== -1 && end > start) {
-    try { return JSON.parse(t.slice(start, end + 1)); } catch (_) {}
-  }
+  const start = t.indexOf("{"), end = t.lastIndexOf("}");
+  if (start !== -1 && end > start) { try { return JSON.parse(t.slice(start, end + 1)); } catch (_) {} }
   return null;
 }
 
-function setGenStatus(html, cls) {
-  const s = $("genStatus");
-  s.innerHTML = html;
-  s.className = "status" + (cls ? " " + cls : "");
-}
-
-function openGenModal() {
-  applyCfgToForm();
-  setGenStatus("", "");
-  $("genOverlay").classList.add("show");
-  $("genPrompt").focus();
-}
+function setGenStatus(html, cls) { const s = $("genStatus"); s.innerHTML = html; s.className = "status" + (cls ? " " + cls : ""); }
+function openGenModal() { applyCfgToForm(); setGenStatus("", ""); $("genOverlay").classList.add("show"); $("genPrompt").focus(); }
 function closeGenModal() { $("genOverlay").classList.remove("show"); }
 
 /* ------------------------------------------------------------------ */
@@ -928,6 +1111,11 @@ $("fileInput").addEventListener("change", e => { if (e.target.files[0]) doImport
 $("gridToggle").addEventListener("change", renderCanvas);
 $("labelToggle").addEventListener("change", renderCanvas);
 
+// collapsible left panels
+document.querySelectorAll("[data-collapsible] .panel-head").forEach(h => {
+  h.addEventListener("click", () => h.closest(".panel").classList.toggle("collapsed"));
+});
+
 // deselect on stage background click
 $("stage").addEventListener("click", () => { selectedId = null; renderCanvas(); renderElements(); });
 
@@ -945,19 +1133,299 @@ document.querySelectorAll("#providerSeg button").forEach(btn => {
   btn.addEventListener("click", () => {
     document.querySelectorAll("#providerSeg button").forEach(b => b.classList.remove("active"));
     btn.classList.add("active");
-    const p = btn.dataset.p;
-    const d = PROVIDER_DEFAULTS[p];
-    const cur = loadCfg();
-    // only auto-fill base/model if empty or still a known default of the other provider
-    const known = Object.values(PROVIDER_DEFAULTS).flatMap(x => [x.baseUrl]);
-    if (!$("cfgBaseUrl").value.trim() || known.includes($("cfgBaseUrl").value.trim().replace(/\/+$/, ""))) $("cfgBaseUrl").value = d.baseUrl;
+    const d = PROVIDER_DEFAULTS[btn.dataset.p];
+    const knownUrls = Object.values(PROVIDER_DEFAULTS).map(x => x.baseUrl);
     const knownModels = Object.values(PROVIDER_DEFAULTS).map(x => x.model);
+    if (!$("cfgBaseUrl").value.trim() || knownUrls.includes($("cfgBaseUrl").value.trim().replace(/\/+$/, ""))) $("cfgBaseUrl").value = d.baseUrl;
     if (!$("cfgModel").value.trim() || knownModels.includes($("cfgModel").value.trim())) $("cfgModel").value = d.model;
-    saveCfg({ provider: p, baseUrl: $("cfgBaseUrl").value.trim(), apiKey: $("cfgApiKey").value.trim(), model: $("cfgModel").value.trim() });
+    readCfgFromForm();
   });
 });
 ["cfgBaseUrl", "cfgApiKey", "cfgModel"].forEach(id => $(id).addEventListener("change", readCfgFromForm));
 
+/* ------------------------------------------------------------------ */
+/*  ComfyUI mode                                                      */
+/* ------------------------------------------------------------------ */
+/* The bundled Ideogram 4 workflow (API format). The positive-prompt   */
+/* node's text is replaced with the editor's JSON on every render.     */
+const WORKFLOW_TEMPLATE = {
+  "25": { inputs: { images: ["98:13", 0] }, class_type: "PreviewImage", _meta: { title: "Preview Image" } },
+  "37": { inputs: { aspect_ratio: "1:1 (Square)", megapixels: 2 }, class_type: "ResolutionSelector", _meta: { title: "Resolution Selector" } },
+  "98:9": { inputs: { vae_name: "flux2-vae.safetensors" }, class_type: "VAELoader", _meta: { title: "Load VAE" } },
+  "98:10": { inputs: { conditioning: ["98:24", 0] }, class_type: "ConditioningZeroOut", _meta: { title: "ConditioningZeroOut" } },
+  "98:11": { inputs: { width: ["98:31", 1], height: ["98:32", 1], batch_size: 1 }, class_type: "EmptyFlux2LatentImage", _meta: { title: "Empty Flux 2 Latent" } },
+  "98:12": { inputs: { noise: ["98:18", 0], guider: ["98:155", 0], sampler: ["98:16", 0], sigmas: ["98:17", 0], latent_image: ["98:11", 0] }, class_type: "SamplerCustomAdvanced", _meta: { title: "SamplerCustomAdvanced" } },
+  "98:13": { inputs: { samples: ["98:12", 0], vae: ["98:9", 0] }, class_type: "VAEDecode", _meta: { title: "VAE Decode" } },
+  "98:16": { inputs: { sampler_name: "res_multistep" }, class_type: "KSamplerSelect", _meta: { title: "KSamplerSelect" } },
+  "98:17": { inputs: { steps: ["98:151", 1], width: ["98:31", 1], height: ["98:32", 1], mu: ["98:144", 0], std: ["98:146", 0] }, class_type: "Ideogram4Scheduler", _meta: { title: "Ideogram 4 Scheduler" } },
+  "98:18": { inputs: { noise_seed: 453251084258580 }, class_type: "RandomNoise", _meta: { title: "RandomNoise" } },
+  "98:23": { inputs: { unet_name: "ideogram4_fp8_scaled.safetensors", weight_dtype: "default" }, class_type: "UNETLoader", _meta: { title: "Load Diffusion Model" } },
+  "98:24": { inputs: { text: "", clip: ["98:14", 0] }, class_type: "CLIPTextEncode", _meta: { title: "CLIP Text Encode (Positive Prompt)" } },
+  "98:14": { inputs: { clip_name: "qwen3vl_8b_fp8_scaled.safetensors", type: "ideogram4", device: "default" }, class_type: "CLIPLoader", _meta: { title: "Load CLIP" } },
+  "98:27": { inputs: { value: ["37", 0] }, class_type: "PrimitiveInt", _meta: { title: "Int (Width)" } },
+  "98:28": { inputs: { value: ["37", 1] }, class_type: "PrimitiveInt", _meta: { title: "Int (Height)" } },
+  "98:31": { inputs: { expression: "max(((a + 15) // 16) * 16, 256)", "values.a": ["98:27", 0] }, class_type: "ComfyMathExpression", _meta: { title: "Math Expression" } },
+  "98:32": { inputs: { expression: "max(((a + 15) // 16) * 16, 256)", "values.a": ["98:28", 0] }, class_type: "ComfyMathExpression", _meta: { title: "Math Expression" } },
+  "98:144": { inputs: { value: ["98:145", 0] }, class_type: "ComfyNumberConvert", _meta: { title: "Number Convert" } },
+  "98:145": { inputs: { json_string: ["98:148", 0], key: "mu" }, class_type: "JsonExtractString", _meta: { title: "Extract Text from JSON" } },
+  "98:146": { inputs: { value: ["98:150", 0] }, class_type: "ComfyNumberConvert", _meta: { title: "Number Convert" } },
+  "98:147": { inputs: { json_string: '{"Quality":{"num_steps":48,"mu":0.0,"std":1.5,"preset_id":"V4_QUALITY_48"},"Default":{"num_steps":20,"mu":0.0,"std":1.75,"preset_id":"V4_DEFAULT_20"},"Turbo":{"num_steps":12,"mu":0.5,"std":1.75,"preset_id":"V4_TURBO_12"}}', key: ["98:156", 0] }, class_type: "JsonExtractString", _meta: { title: "Extract Text from JSON" } },
+  "98:148": { inputs: { string: ["98:147", 0], find: "'", replace: '"' }, class_type: "StringReplace", _meta: { title: "Replace Text" } },
+  "98:149": { inputs: { json_string: ["98:148", 0], key: "num_steps" }, class_type: "JsonExtractString", _meta: { title: "Extract Text from JSON" } },
+  "98:150": { inputs: { json_string: ["98:148", 0], key: "std" }, class_type: "JsonExtractString", _meta: { title: "Extract Text from JSON" } },
+  "98:151": { inputs: { value: ["98:149", 0] }, class_type: "ComfyNumberConvert", _meta: { title: "Number Convert" } },
+  "98:154": { inputs: { unet_name: "ideogram4_unconditional_fp8_scaled.safetensors", weight_dtype: "default" }, class_type: "UNETLoader", _meta: { title: "Load Diffusion Model" } },
+  "98:155": { inputs: { cfg: 7, model: ["98:157", 0], positive: ["98:24", 0], model_negative: ["98:154", 0], negative: ["98:10", 0] }, class_type: "DualModelGuider", _meta: { title: "Dual Model CFG Guider" } },
+  "98:156": { inputs: { choice: "Turbo", index: 2, option1: "Quality", option2: "Default", option3: "Turbo", option4: "" }, class_type: "CustomCombo", _meta: { title: "Custom Combo" } },
+  "98:157": { inputs: { cfg: 3, start_percent: 0.9, end_percent: 1, model: ["98:23", 0] }, class_type: "CFGOverride", _meta: { title: "CFG Override" } }
+};
+const NODE = { resolution: "37", seed: "98:18", preset: "98:156", guider: "98:155", cfgOverride: "98:157", sampler: "98:16", prompt: "98:24", clip: "98:14", diffModel: "98:23", uncondModel: "98:154", vae: "98:9", latent: "98:11" };
+const PRESET_INDEX = { Quality: 0, Default: 1, Turbo: 2 };
+
+const COMFY_KEY = "ideogram_comfy_cfg";
+function defaultComfyCfg() {
+  return {
+    mode: "manual",
+    url: "http://192.168.2.33:8188",
+    aspect_ratio: "1:1 (Square)", megapixels: 2,
+    preset: "Turbo", seed: 453251084258580, randomize: true,
+    cfg: 7, sampler_name: "res_multistep",
+    cfg_override: 3, start_percent: 0.9, end_percent: 1,
+    diff_model: "ideogram4_fp8_scaled.safetensors",
+    uncond_model: "ideogram4_unconditional_fp8_scaled.safetensors",
+    vae_name: "flux2-vae.safetensors",
+    clip_name: "qwen3vl_8b_fp8_scaled.safetensors", clip_type: "ideogram4",
+    batch_size: 1
+  };
+}
+let comfyCfg = loadComfyCfg();
+function loadComfyCfg() { let c; try { c = JSON.parse(localStorage.getItem(COMFY_KEY)); } catch (_) {} return Object.assign(defaultComfyCfg(), c && typeof c === "object" ? c : {}); }
+function saveComfyCfg() { localStorage.setItem(COMFY_KEY, JSON.stringify(comfyCfg)); }
+function comfyBase() {
+  const u = (comfyCfg.url || "").trim().replace(/\/+$/, "");
+  if (u) return u;
+  // Blank => talk to the same origin that served this page (i.e. the proxy).
+  return (location.protocol === "http:" || location.protocol === "https:") ? location.origin : "";
+}
+
+function getClientId() {
+  let id = localStorage.getItem("ideogram_comfy_client");
+  if (!id) { id = "ideogrammar-" + Date.now().toString(36) + Math.random().toString(36).slice(2, 10); localStorage.setItem("ideogram_comfy_client", id); }
+  return id;
+}
+function clampSeed(v) { let n = Math.floor(Number(v)); if (!isFinite(n) || n < 0) n = 0; if (n > Number.MAX_SAFE_INTEGER) n = Number.MAX_SAFE_INTEGER; return n; }
+function randomSeed() { return Math.floor(Math.random() * 1e15); }
+
+function applyMode() {
+  document.body.classList.toggle("comfy-mode", comfyCfg.mode === "comfy");
+  document.querySelectorAll("#modeSeg button").forEach(b => b.classList.toggle("active", b.dataset.mode === comfyCfg.mode));
+}
+function applyComfyForm() {
+  $("cf-url").value = comfyCfg.url;
+  $("cf-aspect").value = comfyCfg.aspect_ratio;
+  $("cf-megapixels").value = comfyCfg.megapixels;
+  $("cf-preset").value = comfyCfg.preset;
+  $("cf-seed").value = comfyCfg.seed;
+  $("cf-randomize").checked = comfyCfg.randomize;
+  $("cf-cfg").value = comfyCfg.cfg;
+  $("cf-sampler").value = comfyCfg.sampler_name;
+  $("cf-cfgo").value = comfyCfg.cfg_override;
+  $("cf-start").value = comfyCfg.start_percent;
+  $("cf-end").value = comfyCfg.end_percent;
+  $("cf-diff").value = comfyCfg.diff_model;
+  $("cf-uncond").value = comfyCfg.uncond_model;
+  $("cf-vae").value = comfyCfg.vae_name;
+  $("cf-clip").value = comfyCfg.clip_name;
+  $("cf-cliptype").value = comfyCfg.clip_type;
+  $("cf-batch").value = comfyCfg.batch_size;
+}
+function readComfyForm() {
+  comfyCfg.url = $("cf-url").value.trim();
+  comfyCfg.aspect_ratio = $("cf-aspect").value.trim();
+  comfyCfg.megapixels = parseFloat($("cf-megapixels").value) || 0;
+  comfyCfg.preset = $("cf-preset").value;
+  comfyCfg.seed = clampSeed($("cf-seed").value);
+  comfyCfg.randomize = $("cf-randomize").checked;
+  comfyCfg.cfg = parseFloat($("cf-cfg").value) || 0;
+  comfyCfg.sampler_name = $("cf-sampler").value.trim();
+  comfyCfg.cfg_override = parseFloat($("cf-cfgo").value) || 0;
+  comfyCfg.start_percent = parseFloat($("cf-start").value) || 0;
+  comfyCfg.end_percent = parseFloat($("cf-end").value) || 0;
+  comfyCfg.diff_model = $("cf-diff").value.trim();
+  comfyCfg.uncond_model = $("cf-uncond").value.trim();
+  comfyCfg.vae_name = $("cf-vae").value.trim();
+  comfyCfg.clip_name = $("cf-clip").value.trim();
+  comfyCfg.clip_type = $("cf-cliptype").value.trim();
+  comfyCfg.batch_size = parseInt($("cf-batch").value, 10) || 1;
+  saveComfyCfg();
+}
+
+function buildWorkflow() {
+  const wf = (typeof structuredClone === "function") ? structuredClone(WORKFLOW_TEMPLATE) : JSON.parse(JSON.stringify(WORKFLOW_TEMPLATE));
+  wf[NODE.prompt].inputs.text = JSON.stringify(buildJSON(), null, 2);
+  wf[NODE.resolution].inputs.aspect_ratio = comfyCfg.aspect_ratio;
+  wf[NODE.resolution].inputs.megapixels = comfyCfg.megapixels;
+  wf[NODE.seed].inputs.noise_seed = comfyCfg.seed;
+  wf[NODE.preset].inputs.choice = comfyCfg.preset;
+  wf[NODE.preset].inputs.index = PRESET_INDEX[comfyCfg.preset] ?? 2;
+  wf[NODE.guider].inputs.cfg = comfyCfg.cfg;
+  wf[NODE.sampler].inputs.sampler_name = comfyCfg.sampler_name;
+  wf[NODE.cfgOverride].inputs.cfg = comfyCfg.cfg_override;
+  wf[NODE.cfgOverride].inputs.start_percent = comfyCfg.start_percent;
+  wf[NODE.cfgOverride].inputs.end_percent = comfyCfg.end_percent;
+  wf[NODE.diffModel].inputs.unet_name = comfyCfg.diff_model;
+  wf[NODE.uncondModel].inputs.unet_name = comfyCfg.uncond_model;
+  wf[NODE.vae].inputs.vae_name = comfyCfg.vae_name;
+  wf[NODE.clip].inputs.clip_name = comfyCfg.clip_name;
+  wf[NODE.clip].inputs.type = comfyCfg.clip_type;
+  wf[NODE.latent].inputs.batch_size = comfyCfg.batch_size;
+  return wf;
+}
+
+let rendering = false;
+let renderWS = null;
+function setRenderStatus(html, cls) { const s = $("renderStatus"); s.innerHTML = html; s.className = "status" + (cls ? " " + cls : ""); }
+function setBar(frac) { $("renderBar").style.width = Math.max(0, Math.min(1, frac)) * 100 + "%"; }
+function finishRender() { rendering = false; $("renderBtn").disabled = $("renderBtn2").disabled = false; if (renderWS) { try { renderWS.close(); } catch (_) {} renderWS = null; } }
+
+async function comfyRender() {
+  if (rendering) return;
+  readComfyForm();
+  const base = comfyBase();
+  if (!base) { setRenderStatus("Set your ComfyUI server URL first.", "err"); return; }
+  if (comfyCfg.randomize) { comfyCfg.seed = randomSeed(); $("cf-seed").value = comfyCfg.seed; saveComfyCfg(); }
+
+  rendering = true;
+  $("renderBtn").disabled = $("renderBtn2").disabled = true;
+  setBar(0);
+  setRenderStatus('<span class="spinner"></span>Queuing…', "");
+
+  let promptId;
+  try {
+    const res = await fetch(base + "/prompt", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prompt: buildWorkflow(), client_id: getClientId() }) });
+    if (!res.ok) {
+      let detail = "";
+      try {
+        const j = await res.json();
+        detail = j.error?.message || j.error?.type || "";
+        if (j.node_errors && Object.keys(j.node_errors).length) {
+          const ne = Object.values(j.node_errors).map(n => (n.errors || []).map(e => e.message).join(", ")).filter(Boolean).join("; ");
+          if (ne) detail += (detail ? " — " : "") + ne;
+        }
+      } catch (_) { detail = await res.text().catch(() => ""); }
+      throw new Error("HTTP " + res.status + (detail ? " — " + detail : ""));
+    }
+    const j = await res.json();
+    promptId = j.prompt_id;
+    if (!promptId) throw new Error("No prompt_id returned by ComfyUI.");
+  } catch (err) {
+    let msg = err.message || String(err);
+    if (err instanceof TypeError) msg = "Network/CORS error reaching " + base + ". Check the URL, that ComfyUI is running, and start it with --enable-cors-header.";
+    setRenderStatus(msg, "err"); finishRender(); return;
+  }
+
+  setRenderStatus('<span class="spinner"></span>Rendering…', "");
+  trackRender(base, promptId);
+}
+
+function trackRender(base, promptId) {
+  let done = false;
+  const complete = async () => {
+    if (done) return; done = true;
+    try { await showResult(base, promptId); }
+    catch (err) { setRenderStatus(err.message || String(err), "err"); }
+    finishRender();
+  };
+  const fail = (msg) => { if (done) return; done = true; setRenderStatus(msg, "err"); finishRender(); };
+
+  // Live progress via websocket (best-effort).
+  try {
+    const ws = new WebSocket(base.replace(/^http/i, "ws") + "/ws?clientId=" + encodeURIComponent(getClientId()));
+    renderWS = ws;
+    ws.onmessage = (ev) => {
+      if (typeof ev.data !== "string") return; // ignore binary preview frames
+      let m; try { m = JSON.parse(ev.data); } catch (_) { return; }
+      if (m.type === "progress" && m.data) setBar((m.data.value || 0) / (m.data.max || 1));
+      else if (m.type === "executing" && m.data && m.data.prompt_id === promptId && m.data.node === null) { setBar(1); complete(); }
+      else if (m.type === "execution_error" && m.data && m.data.prompt_id === promptId) fail("Execution error: " + (m.data.exception_message || "see ComfyUI console"));
+    };
+    ws.onerror = () => {};
+  } catch (_) {}
+
+  // Polling fallback / source of truth for the finished image.
+  let tries = 0;
+  const poll = async () => {
+    if (done) return;
+    tries++;
+    try {
+      const r = await fetch(base + "/history/" + promptId);
+      if (r.ok) { const h = await r.json(); if (h[promptId] && h[promptId].outputs && Object.keys(h[promptId].outputs).length) { complete(); return; } }
+    } catch (_) {}
+    if (tries > 240) { fail("Timed out waiting for the render."); return; }
+    setTimeout(poll, 1500);
+  };
+  setTimeout(poll, 1500);
+}
+
+async function showResult(base, promptId) {
+  const r = await fetch(base + "/history/" + promptId);
+  if (!r.ok) throw new Error("Could not fetch the result (HTTP " + r.status + ").");
+  const h = await r.json();
+  const outputs = h[promptId] && h[promptId].outputs;
+  if (!outputs) throw new Error("No outputs found in history.");
+  let img = null;
+  for (const nodeId of Object.keys(outputs)) { const o = outputs[nodeId]; if (o.images && o.images.length) { img = o.images[o.images.length - 1]; break; } }
+  if (!img) throw new Error("Render finished but produced no image.");
+  const url = base + "/view?" + new URLSearchParams({ filename: img.filename, subfolder: img.subfolder || "", type: img.type || "output" }).toString();
+  const el = $("renderImg");
+  el.onload = () => { el.style.display = "block"; $("renderPlaceholder").style.display = "none"; };
+  el.onerror = () => setRenderStatus("Image rendered but could not be loaded from " + base + "/view", "err");
+  el.src = url;
+  setRenderStatus("Done ✓ · seed " + comfyCfg.seed, "ok");
+  toast("Render complete ✓", "ok");
+}
+
+let testing = false;
+async function comfyTest() {
+  if (testing) return;
+  readComfyForm();
+  const base = comfyBase();
+  const s = $("cf-testStatus");
+  const set = (html, cls) => { s.innerHTML = html; s.className = "status" + (cls ? " " + cls : ""); };
+  if (!base) { set("Set a Server URL first (or run comfy_proxy.py and leave it blank).", "err"); return; }
+  testing = true; $("cf-test").disabled = true;
+  set('<span class="spinner"></span>Checking ' + base + ' …', "");
+  try {
+    const res = await fetch(base + "/system_stats");
+    if (!res.ok) { set("Reached the server but it returned HTTP " + res.status + " " + res.statusText + ".", "err"); return; }
+    let extra = "";
+    try { const j = await res.json(); const v = j.system && j.system.comfyui_version; if (v) extra = " · ComfyUI " + v; } catch (_) {}
+    set("Connected ✓" + extra, "ok");
+  } catch (err) {
+    if (err instanceof TypeError) {
+      set("Couldn't reach " + base + " — the server is down/unreachable, the URL is wrong, or the browser blocked it (CORS). Fix: run comfy_proxy.py and open the editor through it, or start ComfyUI with --enable-cors-header.", "err");
+    } else {
+      set(err.message || String(err), "err");
+    }
+  } finally {
+    testing = false; $("cf-test").disabled = false;
+  }
+}
+
+// wiring
+$("cf-test").addEventListener("click", comfyTest);
+document.querySelectorAll("#modeSeg button").forEach(btn => {
+  btn.addEventListener("click", () => { comfyCfg.mode = btn.dataset.mode; saveComfyCfg(); applyMode(); });
+});
+$("renderBtn").addEventListener("click", comfyRender);
+$("renderBtn2").addEventListener("click", comfyRender);
+$("cf-rerollSeed").addEventListener("click", () => { comfyCfg.seed = randomSeed(); $("cf-seed").value = comfyCfg.seed; saveComfyCfg(); });
+["cf-url", "cf-aspect", "cf-megapixels", "cf-preset", "cf-seed", "cf-randomize", "cf-cfg", "cf-sampler", "cf-cfgo", "cf-start", "cf-end", "cf-diff", "cf-uncond", "cf-vae", "cf-clip", "cf-cliptype", "cf-batch"].forEach(id => {
+  const e = $(id); if (e) e.addEventListener("change", readComfyForm);
+});
+
+applyComfyForm();
+applyMode();
 render();
 </script>
 </body>
