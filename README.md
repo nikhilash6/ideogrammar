@@ -101,6 +101,35 @@ Both are stdlib-only (Python 3.8+) — nothing to install.
 
 > **Common mistake:** serving the editor with a *plain* static server (e.g. `python -m http.server`) and opening that. A static server hands out `index.html` but 404s on `/system_stats`, `/prompt`, etc. — so renders fail. The editor must be served by `comfy_proxy.py`, which forwards those calls.
 
+#### Run it as a background service (systemd, survives logout/reboot)
+
+```bash
+./comfy_proxy.sh install-service     # install + enable + start (per-user, no sudo)
+```
+
+This writes a systemd **user** unit, enables it at boot, starts it, and turns on linger so it keeps running when you log out. Manage it with standard systemd:
+
+```bash
+systemctl --user status  comfy_proxy.service
+systemctl --user restart comfy_proxy.service
+systemctl --user stop    comfy_proxy.service
+journalctl --user -u comfy_proxy.service -f      # live logs
+./comfy_proxy.sh uninstall-service               # remove it
+```
+
+Set host/port/target at install time with the same env vars:
+
+```bash
+COMFY_URL=http://192.168.2.33:8188 PROXY_HOST=0.0.0.0 PROXY_PORT=8189 ./comfy_proxy.sh install-service
+```
+
+For a **system-wide** service instead (starts at boot regardless of any login; uses sudo):
+
+```bash
+SERVICE_SCOPE=system ./comfy_proxy.sh install-service
+# manage with: sudo systemctl {status|restart|stop} comfy_proxy.service
+```
+
 **Option B — connect directly (enable CORS in ComfyUI):**
 
 ```bash
@@ -119,7 +148,7 @@ The **Test connection** button in the ComfyUI panel pings `/system_stats` and re
 |------|---------|
 | [`index.html`](index.html) | The entire app — editor, canvas, LLM generation, ComfyUI mode. |
 | [`comfy_proxy.py`](comfy_proxy.py) | Stdlib proxy: serves the page + forwards HTTP and the WebSocket to ComfyUI (same-origin, no CORS flags). |
-| [`comfy_proxy.sh`](comfy_proxy.sh) | start/stop/status/restart/logs helper for the proxy (writes a PID file + log). |
+| [`comfy_proxy.sh`](comfy_proxy.sh) | start/stop/status/restart/logs helper, plus `install-service`/`uninstall-service` to run it as a background systemd service. |
 | [`workflow.json`](workflow.json) | The Ideogram 4 ComfyUI workflow (API format) the render mode is built around; also embedded in `index.html`. |
 
 ## Notes

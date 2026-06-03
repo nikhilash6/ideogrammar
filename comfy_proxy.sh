@@ -92,14 +92,84 @@ status() {
   fi
 }
 
+# ---- systemd service (background, survives logout/reboot) ------------------
+# Default scope is the per-user systemd instance (no sudo). Set
+# SERVICE_SCOPE=system to install a system-wide service (uses sudo).
+SERVICE_NAME="comfy_proxy.service"
+SERVICE_SCOPE="${SERVICE_SCOPE:-user}"
+
+unit_text() {
+  cat <<UNIT
+[Unit]
+Description=Ideogrammar ComfyUI proxy ($PROXY_HOST:$PROXY_PORT -> $COMFY_URL)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=$DIR
+ExecStart=$PYTHON $DIR/comfy_proxy.py --host $PROXY_HOST --port $PROXY_PORT --comfy $COMFY_URL
+Restart=on-failure
+RestartSec=3
+$( [ "$SERVICE_SCOPE" = system ] && echo "User=$(id -un)" )
+
+[Install]
+WantedBy=$( [ "$SERVICE_SCOPE" = system ] && echo multi-user.target || echo default.target )
+UNIT
+}
+
+install_service() {
+  # Free the port: stop any script-managed instance first.
+  is_running && stop || true
+  if [ "$SERVICE_SCOPE" = system ]; then
+    echo "Installing system service (sudo)…"
+    unit_text | sudo tee "/etc/systemd/system/$SERVICE_NAME" >/dev/null
+    sudo systemctl daemon-reload
+    sudo systemctl enable --now "$SERVICE_NAME"
+    echo "Installed. Manage with: sudo systemctl {status|restart|stop} $SERVICE_NAME"
+    sudo systemctl --no-pager status "$SERVICE_NAME" | head -n 5 || true
+  else
+    export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+    local unitdir="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
+    mkdir -p "$unitdir"
+    unit_text > "$unitdir/$SERVICE_NAME"
+    systemctl --user daemon-reload
+    systemctl --user enable --now "$SERVICE_NAME"
+    # Keep it running after logout / across reboots.
+    loginctl enable-linger "$(id -un)" 2>/dev/null \
+      && echo "Linger enabled (survives logout/reboot)." \
+      || echo "Note: could not enable linger automatically — run: sudo loginctl enable-linger $(id -un)"
+    echo "Installed. Manage with: systemctl --user {status|restart|stop} $SERVICE_NAME"
+    systemctl --user --no-pager status "$SERVICE_NAME" | head -n 5 || true
+  fi
+  echo "Open the editor at: http://$(lan_ip):$PROXY_PORT/"
+}
+
+uninstall_service() {
+  if [ "$SERVICE_SCOPE" = system ]; then
+    sudo systemctl disable --now "$SERVICE_NAME" 2>/dev/null || true
+    sudo rm -f "/etc/systemd/system/$SERVICE_NAME"
+    sudo systemctl daemon-reload
+  else
+    export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+    systemctl --user disable --now "$SERVICE_NAME" 2>/dev/null || true
+    rm -f "${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user/$SERVICE_NAME"
+    systemctl --user daemon-reload
+  fi
+  echo "Service removed."
+}
+
 case "${1:-}" in
-  start)   start ;;
-  stop)    stop ;;
-  restart) stop; start ;;
-  status)  status ;;
-  logs)    tail -f "$LOGFILE" ;;
+  start)             start ;;
+  stop)              stop ;;
+  restart)           stop; start ;;
+  status)            status ;;
+  logs)              tail -f "$LOGFILE" ;;
+  install-service)   install_service ;;
+  uninstall-service) uninstall_service ;;
   *)
-    echo "Usage: $0 {start|stop|restart|status|logs}"
+    echo "Usage: $0 {start|stop|restart|status|logs|install-service|uninstall-service}"
+    echo "  install-service installs a background systemd service (user scope; SERVICE_SCOPE=system for system-wide)."
     exit 2
     ;;
 esac
