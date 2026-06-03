@@ -174,7 +174,7 @@
   .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 
   /* ---------- canvas ---------- */
-  .canvas-wrap { position: relative; width: 100%; max-width: 580px; aspect-ratio: 1/1; background: #fafbfc; border-radius: var(--r); overflow: hidden; box-shadow: var(--shadow), 0 0 0 1px var(--border); flex-shrink: 0; }
+  .canvas-wrap { position: relative; width: 100%; max-width: 580px; aspect-ratio: 1/1; background: #0d1119; border-radius: var(--r); overflow: hidden; box-shadow: var(--shadow), 0 0 0 1px var(--border); flex-shrink: 0; }
   #stage { position: absolute; inset: 0; }
   .box { position: absolute; border: 2px solid var(--accent); background: rgba(99,102,241,.1); cursor: move; font-size: 11px; color: #fff; overflow: visible; border-radius: 2px; transition: box-shadow .1s; }
   .box .lbl { position: absolute; top: 0; left: 0; padding: 2px 6px; font-size: 10px; font-weight: 600; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; border-radius: 0 0 5px 0; pointer-events: none; }
@@ -182,7 +182,7 @@
   .handle { position: absolute; width: 11px; height: 11px; background: #fff; border: 1.5px solid var(--accent); border-radius: 3px; }
   .handle.se { right: -6px; bottom: -6px; cursor: nwse-resize; }
   .canvas-meta { font-size: 11px; color: var(--muted); text-align: center; line-height: 1.6; }
-  .grid-line { position: absolute; background: rgba(15,23,42,.06); }
+  .grid-line { position: absolute; background: rgba(255,255,255,.05); }
   .toggle { display: flex; align-items: center; gap: 7px; margin: 0; color: var(--muted); font-size: 12px; cursor: pointer; }
   .toggle input { width: auto; accent-color: var(--accent); }
 
@@ -445,7 +445,7 @@
   <!-- MIDDLE: canvas -->
   <div class="col canvas-col">
     <div class="col-title" style="align-self:flex-start;">Layout preview</div>
-    <div class="canvas-wrap"><div id="stage"></div></div>
+    <div class="canvas-wrap" id="canvasWrap"><div id="stage"></div></div>
     <div class="canvas-meta">
       Origin top-left · X,Y → right, down · 0–1000 per axis<br>
       Drag a box to move · drag the corner to resize · click to select
@@ -1253,6 +1253,26 @@ function randomSeed() { return Math.floor(Math.random() * 1e15); }
 function applyMode() {
   document.body.classList.toggle("comfy-mode", comfyCfg.mode === "comfy");
   document.querySelectorAll("#modeSeg button").forEach(b => b.classList.toggle("active", b.dataset.mode === comfyCfg.mode));
+  applyCanvasAspect();
+}
+
+// Shape the layout-preview canvas to match the selected output aspect ratio.
+// Coordinates stay normalized 0-1000 per axis; only the canvas box reshapes.
+function parseAspectRatio(s) {
+  const m = String(s || "").match(/(\d+(?:\.\d+)?)\s*:\s*(\d+(?:\.\d+)?)/);
+  if (m) { const a = parseFloat(m[1]), b = parseFloat(m[2]); if (a > 0 && b > 0) return a / b; }
+  return 1;
+}
+function applyCanvasAspect() {
+  const wrap = $("canvasWrap");
+  if (!wrap) return;
+  const ar = (comfyCfg.mode === "comfy") ? parseAspectRatio($("cf-aspect").value) : 1;
+  const maxW = 580, maxH = Math.max(260, window.innerHeight * 0.6);
+  let w = maxW, h = w / ar;
+  if (h > maxH) { h = maxH; w = h * ar; }
+  wrap.style.width = Math.round(w) + "px";
+  wrap.style.height = Math.round(h) + "px";
+  renderCanvas();
 }
 function syncConnFields() { $("cf-urlRow").style.display = $("cf-direct").checked ? "block" : "none"; }
 function applyComfyForm() {
@@ -1480,6 +1500,8 @@ function updateComfyTarget() {
 $("cf-test").addEventListener("click", comfyTest);
 $("cf-url").addEventListener("input", updateComfyTarget);
 $("cf-direct").addEventListener("change", () => { readComfyForm(); syncConnFields(); updateComfyTarget(); });
+$("cf-aspect").addEventListener("change", applyCanvasAspect);
+window.addEventListener("resize", applyCanvasAspect);
 document.querySelectorAll("#modeSeg button").forEach(btn => {
   btn.addEventListener("click", () => { comfyCfg.mode = btn.dataset.mode; saveComfyCfg(); applyMode(); });
 });
