@@ -71,7 +71,40 @@ python3 -m venv .venv
 PYTHON="$PWD/.venv/bin/python" ./comfy_proxy.sh install-service
 ```
 
-Optional, higher-quality masks via Segment Anything: install `torch` + `segment-anything` into the venv, download a checkpoint, and start the proxy with `SAM_CHECKPOINT=/path/sam_vit_b.pth` (and optionally `SAM_MODEL_TYPE=vit_b`) in the environment. If set, SAM is used for masks; otherwise the foreground heuristic is. Photoreal subjects don't meaningfully vectorize (kept raster by design), so output is a mixed vector+raster SVG.
+Photoreal subjects don't meaningfully vectorize (kept raster by design), so output is a mixed vector+raster SVG.
+
+#### Optional: higher-quality masks via Segment Anything (SAM)
+
+If `SAM_CHECKPOINT` is set, the proxy uses [SAM](https://github.com/facebookresearch/segment-anything) for region masks instead of the built-in foreground heuristic. Install it into the same venv and download a checkpoint:
+
+```bash
+# CPU build of PyTorch (~200 MB) — simplest, no CUDA matching needed
+.venv/bin/pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+.venv/bin/pip install "git+https://github.com/facebookresearch/segment-anything.git"
+
+# vit_b checkpoint (~358 MB), smallest/fastest
+mkdir -p models
+curl -L -o models/sam_vit_b_01ec64.pth \
+  https://dl.fbaipublicfiles.com/segment_anything/sam_vit_b_01ec64.pth
+```
+
+Point the service at it — `install-service` writes the env vars into the systemd unit when they're set, so it persists across restarts:
+
+```bash
+SAM_CHECKPOINT="$PWD/models/sam_vit_b_01ec64.pth" SAM_MODEL_TYPE=vit_b \
+  PYTHON="$PWD/.venv/bin/python" ./comfy_proxy.sh install-service
+```
+
+If SAM fails to load it silently falls back to the heuristic, so the feature never hard-breaks.
+
+> **Speed (CPU):** the CPU build is not fast — the first vectorize after a (re)start pays a one-time model-load cost (~a minute), and each region then takes a few seconds. Fine for an occasional manual action. For GPU speed (it shares the card with ComfyUI; the code auto-selects CUDA when available), install a CUDA build instead and restart:
+>
+> ```bash
+> .venv/bin/pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121  # match your CUDA
+> systemctl --user restart comfy_proxy.service
+> ```
+>
+> `vit_l` / `vit_h` checkpoints give sharper masks at higher cost. `models/` and `.venv/` are gitignored.
 
 **Gallery & saving.** Every render is added to a **History** strip below the result; click the result image or any thumbnail to open a full-size **viewer modal** with prev/next (arrow keys), seed/aspect info, and a download link. By default renders are ComfyUI **temp** files, so the gallery is session-only. Tick **Save renders permanently** to switch the output node to `SaveImage` (files land in ComfyUI's `output/` as `ideogrammar_*.png`); those renders persist in the gallery across reloads (stored in `localStorage`, last 60). **Clear** empties the gallery list only — it never deletes files from `output/`.
 
