@@ -62,6 +62,8 @@ The middle panel also reshapes to the selected **aspect ratio** so the layout pr
 
 **Vectorize to SVG (local, experimental).** The **⬡ Vectorize → SVG** button (in the Rendered output tile, and in the full-image viewer for any gallery item) converts a render to a *hybrid* SVG: flat regions (text, logos, and `obj` regions that pass a flatness heuristic) are traced to vector paths with [VTracer](https://github.com/visioncortex/vtracer); photographic regions (`subject`, `bg`) stay as an embedded raster base. Routing uses the element types from the prompt plus a per-region reconstruction-error test. Each vector overlay is **clipped to the element's actual shape** (so vector text sits over the photo as glyphs, not as a rectangle) using a mask — **SAM if you've configured it**, otherwise a built-in foreground heuristic. The result opens in the viewer with a download link.
 
+The **⚙ settings** dialog (next to the Vectorize button) lets you pick the **mask method** — SAM, the foreground heuristic (the older, faster method), or no masking (trace the whole box) — and a **flatness threshold** for `Auto` regions. For finer control, each element card has a **Vectorize** dropdown: *Auto (by type)*, *Always vector*, or *Never (keep raster)* — handy when the automatic routing vectorizes the wrong part.
+
 This runs in `comfy_proxy.py`'s `/vectorize` endpoint and needs extra Python packages on the proxy host (kept in a venv; the proxy lazily imports them, so the rest of the app is unaffected if they're absent):
 
 ```bash

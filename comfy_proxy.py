@@ -453,8 +453,11 @@ def _flat_foreground_mask(crop):
         return None
 
 
-def _region_mask(crop):
-    # SAM if configured (best), else the flat-foreground heuristic.
+def _region_mask(crop, backend="auto"):
+    # backend: "heuristic" -> always the flat-foreground heuristic;
+    #          "auto"      -> SAM if configured, else the heuristic.
+    if backend == "heuristic":
+        return _flat_foreground_mask(crop)
     m = _sam_mask(crop)
     if m is None:
         m = _flat_foreground_mask(crop)
@@ -486,7 +489,8 @@ def vectorize_image(img_bytes, elements, options):
     img = Image.open(io.BytesIO(img_bytes)).convert("RGB")
     W, H = img.size
     flat_threshold = float(options.get("flat_threshold", 11.0))
-    use_mask = bool(options.get("mask", True))
+    backend = (options.get("mask_backend") or "auto").lower()
+    use_mask = backend != "none"
     flat_types = {"text", "logo"}
     never_types = {"subject", "bg"}
     vec_parts = []
@@ -507,14 +511,20 @@ def vectorize_image(img_bytes, elements, options):
             continue
         t = (el.get("type") or "").lower()
         crop = img.crop((px1, py1, px2, py2))
-        do_vec = (t in flat_types) or (t not in never_types and _is_flat(crop, flat_threshold))
+        mode = (el.get("vectorize") or "auto").lower()
+        if mode == "off":
+            do_vec = False
+        elif mode == "on":
+            do_vec = True
+        else:
+            do_vec = (t in flat_types) or (t not in never_types and _is_flat(crop, flat_threshold))
         region = {"type": t, "x": px1, "y": py1, "w": px2 - px1, "h": py2 - py1, "vector": False}
         if do_vec:
             try:
                 inner, cw, ch = _trace_crop(crop)
                 clip_defs, g_open, g_close = "", "", ""
                 if use_mask:
-                    m = _region_mask(crop)
+                    m = _region_mask(crop, backend)
                     polys = _mask_to_polys(m) if m is not None else []
                     if polys:
                         cid = "vclip%d" % idx

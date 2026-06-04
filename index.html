@@ -528,7 +528,7 @@
       </div>
       <div class="progress"><div id="renderBar"></div></div>
       <div class="render-row"><span class="status" id="renderStatus"></span></div>
-      <div class="render-row"><button id="vectorizeBtn" title="Trace flat regions (text/logos/flat art) to vector, keep photographic parts as raster">⬡ Vectorize → SVG</button><span class="status" id="vectorizeStatus" style="flex:1;"></span></div>
+      <div class="render-row"><button id="vectorizeBtn" title="Trace flat regions (text/logos/flat art) to vector, keep photographic parts as raster">⬡ Vectorize → SVG</button><button id="vecSettingsBtn" title="Vectorizer settings" style="padding:7px 10px;">⚙</button><span class="status" id="vectorizeStatus" style="flex:1;"></span></div>
       <div id="galleryRow" style="display:none; flex-direction:column; align-items:stretch; gap:6px; width:100%;">
         <div class="col-title" style="margin:6px 0 0; display:flex; align-items:center; gap:8px;">History <span id="galleryCount" class="count"></span><span style="flex:1"></span><button id="galleryClear" title="Clear gallery list (does not delete files)" style="padding:2px 9px; font-size:11px; text-transform:none; letter-spacing:0;">Clear</button></div>
         <div class="gallery" id="gallery"></div>
@@ -592,6 +592,32 @@
   </div>
 </div>
 
+<!-- VECTORIZER SETTINGS MODAL -->
+<div class="overlay" id="vecOverlay">
+  <div class="modal" style="max-width:480px;">
+    <div class="modal-head">
+      <h2>Vectorizer settings</h2>
+      <button class="close" id="vecClose">×</button>
+    </div>
+    <div class="modal-body">
+      <label>Mask method <span style="color:var(--faint)">(how each vector region is cut out)</span></label>
+      <select id="vec-backend">
+        <option value="auto">SAM if available — precise, slower</option>
+        <option value="heuristic">Foreground heuristic — faster (the older method)</option>
+        <option value="none">No masking — trace the whole box</option>
+      </select>
+      <div class="hint">SAM gives pixel-accurate cutouts but is slow on CPU and can grab the wrong region. The heuristic isolates the “ink” from the local background. “No masking” traces the full bounding box (can include surrounding pixels).</div>
+      <label style="margin-top:14px;">Flatness threshold <span style="color:var(--faint)">(higher → vectorize more borderline “obj” regions)</span></label>
+      <input type="number" id="vec-flat" min="0" max="60" step="1">
+      <div class="hint">Only affects elements set to <b>Auto</b>. Use the per-element <b>Vectorize</b> dropdown to force a specific element on or off.</div>
+    </div>
+    <div class="modal-foot">
+      <span class="status" style="flex:1"></span>
+      <button id="vecDone" class="primary">Done</button>
+    </div>
+  </div>
+</div>
+
 <!-- IMAGE VIEWER MODAL -->
 <div class="overlay" id="imgOverlay">
   <div class="img-modal">
@@ -626,6 +652,7 @@ function emptyElement(seed = {}) {
     bbox: seed.bbox ?? [100, 100, 500, 500],
     desc: seed.desc ?? "",
     color_palette: seed.color_palette ?? ["#FFFFFF"],
+    vectorize: seed.vectorize ?? "auto",
     _collapsed: seed._collapsed ?? true
   };
 }
@@ -788,6 +815,15 @@ function renderElements() {
     if (!types.includes(el.type)) { const o = document.createElement("option"); o.value = el.type; o.textContent = el.type; o.selected = true; typeSel.appendChild(o); }
     typeSel.addEventListener("change", () => { el.type = typeSel.value; renderJSON(); });
     body.appendChild(typeSel);
+
+    const vecLabel = document.createElement("label"); vecLabel.textContent = "Vectorize";
+    body.appendChild(vecLabel);
+    const vecSel = document.createElement("select");
+    [["auto", "Auto (by type)"], ["on", "Always vector"], ["off", "Never (keep raster)"]].forEach(([v, t]) => {
+      const o = document.createElement("option"); o.value = v; o.textContent = t; if ((el.vectorize || "auto") === v) o.selected = true; vecSel.appendChild(o);
+    });
+    vecSel.addEventListener("change", () => { el.vectorize = vecSel.value; });
+    body.appendChild(vecSel);
 
     const descLabel = document.createElement("label"); descLabel.textContent = "Description";
     body.appendChild(descLabel);
@@ -1714,6 +1750,20 @@ function closeImgModal() { $("imgOverlay").classList.remove("show"); }
 function stepImg(d) { openImgModal(viewerIndex + d); }
 
 /* ---- vectorize (raster -> hybrid SVG via the proxy /vectorize endpoint) ---- */
+const VEC_KEY = "ideogram_vec_cfg";
+let vecCfg = loadVecCfg();
+function loadVecCfg() { let c; try { c = JSON.parse(localStorage.getItem(VEC_KEY)); } catch (_) {} return Object.assign({ mask_backend: "auto", flat_threshold: 11 }, c && typeof c === "object" ? c : {}); }
+function saveVecCfg() { localStorage.setItem(VEC_KEY, JSON.stringify(vecCfg)); }
+function applyVecForm() { $("vec-backend").value = vecCfg.mask_backend; $("vec-flat").value = vecCfg.flat_threshold; }
+function readVecForm() {
+  vecCfg.mask_backend = $("vec-backend").value;
+  let f = parseFloat($("vec-flat").value);
+  vecCfg.flat_threshold = (isFinite(f) && f >= 0 && f <= 60) ? f : 11;
+  saveVecCfg();
+}
+function openVecSettings() { applyVecForm(); $("vecOverlay").classList.add("show"); }
+function closeVecSettings() { readVecForm(); $("vecOverlay").classList.remove("show"); }
+
 let lastSvgUrl = null;
 function setVecStatus(html, cls) { const s = $("vectorizeStatus"); s.innerHTML = html; s.className = "status" + (cls ? " " + cls : ""); }
 function vectorizeLast() { vectorizeEntry(renderHistory.length - 1); }
@@ -1723,14 +1773,15 @@ async function vectorizeEntry(idx) {
   const entry = renderHistory[idx];
   const base = comfyBase();
   if (!base) { setVecStatus("Set a server / run the proxy first.", "err"); return; }
-  const elements = entry.elements && entry.elements.length ? entry.elements : state.elements.map(e => ({ type: e.type, bbox: e.bbox.slice() }));
+  // Use the current layout + per-element vectorize modes (matches the latest render).
+  const elements = state.elements.map(e => ({ type: e.type, bbox: e.bbox.slice(), vectorize: e.vectorize || "auto" }));
   $("vectorizeBtn").disabled = $("imgVectorize").disabled = true;
   setVecStatus('<span class="spinner"></span>Vectorizing…', "");
   toast("Vectorizing…");
   try {
     const res = await fetch(base + "/vectorize", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ src: { filename: entry.filename, subfolder: entry.subfolder, type: entry.type }, elements })
+      body: JSON.stringify({ src: { filename: entry.filename, subfolder: entry.subfolder, type: entry.type }, elements, options: { mask_backend: vecCfg.mask_backend, flat_threshold: vecCfg.flat_threshold } })
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(data.error || ("HTTP " + res.status));
@@ -1826,6 +1877,14 @@ $("imgNext").addEventListener("click", () => stepImg(1));
 $("imgClose").addEventListener("click", closeImgModal);
 $("imgVectorize").addEventListener("click", () => vectorizeEntry(viewerIndex));
 $("vectorizeBtn").addEventListener("click", vectorizeLast);
+$("vecSettingsBtn").addEventListener("click", openVecSettings);
+$("vecClose").addEventListener("click", closeVecSettings);
+$("vecDone").addEventListener("click", closeVecSettings);
+["vec-backend", "vec-flat"].forEach(id => $(id).addEventListener("change", readVecForm));
+let vecOverlayPressedSelf = false;
+$("vecOverlay").addEventListener("mousedown", e => { vecOverlayPressedSelf = (e.target === $("vecOverlay")); });
+$("vecOverlay").addEventListener("click", e => { if (e.target === $("vecOverlay") && vecOverlayPressedSelf) closeVecSettings(); });
+document.addEventListener("keydown", e => { if (e.key === "Escape" && $("vecOverlay").classList.contains("show")) closeVecSettings(); });
 $("galleryClear").addEventListener("click", () => { if (renderHistory.length && confirm("Clear the render gallery? This only clears the list here — files in ComfyUI's output/ are not deleted.")) clearRenderHistory(); });
 let imgOverlayPressedSelf = false;
 $("imgOverlay").addEventListener("mousedown", e => { imgOverlayPressedSelf = (e.target === $("imgOverlay")); });
