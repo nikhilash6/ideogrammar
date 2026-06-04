@@ -354,6 +354,29 @@ def _is_flat(crop, threshold=11.0):
     return mean < threshold
 
 
+def _rotate_image(img, deg):
+    from PIL import Image
+    if deg == 90:
+        return img.transpose(Image.ROTATE_270)   # 90 clockwise
+    if deg == 180:
+        return img.transpose(Image.ROTATE_180)
+    if deg == 270:
+        return img.transpose(Image.ROTATE_90)     # 90 counter-clockwise
+    return img
+
+
+def _rotate_bbox(b, deg):
+    # bbox in normalized 0..1000 per axis; rotate to match a clockwise image rotation
+    x1, y1, x2, y2 = b
+    if deg == 90:
+        return [1000 - y2, x1, 1000 - y1, x2]
+    if deg == 180:
+        return [1000 - x2, 1000 - y2, 1000 - x1, 1000 - y1]
+    if deg == 270:
+        return [y1, 1000 - x2, y2, 1000 - x1]
+    return [x1, y1, x2, y2]
+
+
 def _trace_crop(crop):
     import vtracer
     cw, ch = crop.size
@@ -487,6 +510,9 @@ def vectorize_image(img_bytes, elements, options):
     element's actual shape so it doesn't paint a rectangle over the photo."""
     from PIL import Image
     img = Image.open(io.BytesIO(img_bytes)).convert("RGB")
+    rotate = int(options.get("rotate", 0) or 0) % 360
+    if rotate in (90, 180, 270):
+        img = _rotate_image(img, rotate)
     W, H = img.size
     flat_threshold = float(options.get("flat_threshold", 11.0))
     backend = (options.get("mask_backend") or "auto").lower()
@@ -503,6 +529,8 @@ def vectorize_image(img_bytes, elements, options):
             x1, y1, x2, y2 = [float(v) for v in bbox]
         except Exception:
             continue
+        if rotate in (90, 180, 270):
+            x1, y1, x2, y2 = _rotate_bbox([x1, y1, x2, y2], rotate)
         px1 = max(0, min(W, round(min(x1, x2) / 1000.0 * W)))
         px2 = max(0, min(W, round(max(x1, x2) / 1000.0 * W)))
         py1 = max(0, min(H, round(min(y1, y2) / 1000.0 * H)))

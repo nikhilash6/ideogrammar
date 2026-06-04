@@ -108,7 +108,7 @@ If SAM fails to load it silently falls back to the heuristic, so the feature nev
 >
 > `vit_l` / `vit_h` checkpoints give sharper masks at higher cost. `models/` and `.venv/` are gitignored.
 
-**Gallery & saving.** Every render is added to a **History** strip below the result; click the result image or any thumbnail to open a full-size **viewer modal** with prev/next (arrow keys), seed/aspect info, and a download link. By default renders are ComfyUI **temp** files, so the gallery is session-only. Tick **Save renders permanently** to switch the output node to `SaveImage` (files land in ComfyUI's `output/` as `ideogrammar_*.png`); those renders persist in the gallery across reloads (stored in `localStorage`, last 60). **Clear** empties the gallery list only — it never deletes files from `output/`.
+**Gallery & saving.** Every render is added to a **History** strip below the result; click the result image or any thumbnail to open a full-size **viewer modal** with prev/next (arrow keys), **rotate 90° CW/CCW** (saved per item; applied to the view, the download, the gallery thumbnail, and vectorize), seed/aspect info, and a download link. By default renders are ComfyUI **temp** files, so the gallery is session-only. Tick **Save renders permanently** to switch the output node to `SaveImage` (files land in ComfyUI's `output/` as `ideogrammar_*.png`); those renders persist in the gallery across reloads (stored in `localStorage`, last 60). **Clear** empties the gallery list only — it never deletes files from `output/`.
 
 ### The CORS problem (and why the proxy exists)
 
