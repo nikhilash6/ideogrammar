@@ -60,16 +60,18 @@ ComfyUI mode renders the current prompt on your server with the bundled Ideogram
 
 The middle panel also reshapes to the selected **aspect ratio** so the layout preview matches the real canvas (coordinates stay normalized `0–1000` per axis).
 
-**Vectorize to SVG (local, experimental).** The **⬡ Vectorize → SVG** button in the Rendered output tile converts the latest render to a *hybrid* SVG: flat regions (text, logos, and `obj` regions that pass a flatness heuristic) are traced to vector paths with [VTracer](https://github.com/visioncortex/vtracer); photographic regions (`subject`, `bg`) stay as an embedded raster base. Routing uses the element types from the prompt plus a per-region reconstruction-error test. The result opens in the viewer with a download link. This runs in `comfy_proxy.py`'s `/vectorize` endpoint and needs two extra Python packages on the proxy host:
+**Vectorize to SVG (local, experimental).** The **⬡ Vectorize → SVG** button (in the Rendered output tile, and in the full-image viewer for any gallery item) converts a render to a *hybrid* SVG: flat regions (text, logos, and `obj` regions that pass a flatness heuristic) are traced to vector paths with [VTracer](https://github.com/visioncortex/vtracer); photographic regions (`subject`, `bg`) stay as an embedded raster base. Routing uses the element types from the prompt plus a per-region reconstruction-error test. Each vector overlay is **clipped to the element's actual shape** (so vector text sits over the photo as glyphs, not as a rectangle) using a mask — **SAM if you've configured it**, otherwise a built-in foreground heuristic. The result opens in the viewer with a download link.
+
+This runs in `comfy_proxy.py`'s `/vectorize` endpoint and needs extra Python packages on the proxy host (kept in a venv; the proxy lazily imports them, so the rest of the app is unaffected if they're absent):
 
 ```bash
 python3 -m venv .venv
-.venv/bin/pip install vtracer pillow
+.venv/bin/pip install vtracer pillow opencv-python-headless numpy
 # point the service at that interpreter:
 PYTHON="$PWD/.venv/bin/python" ./comfy_proxy.sh install-service
 ```
 
-Without those packages the endpoint returns a clear "deps missing" message and the rest of the app is unaffected. Photoreal subjects don't meaningfully vectorize (kept raster by design), so output is a mixed vector+raster SVG.
+Optional, higher-quality masks via Segment Anything: install `torch` + `segment-anything` into the venv, download a checkpoint, and start the proxy with `SAM_CHECKPOINT=/path/sam_vit_b.pth` (and optionally `SAM_MODEL_TYPE=vit_b`) in the environment. If set, SAM is used for masks; otherwise the foreground heuristic is. Photoreal subjects don't meaningfully vectorize (kept raster by design), so output is a mixed vector+raster SVG.
 
 **Gallery & saving.** Every render is added to a **History** strip below the result; click the result image or any thumbnail to open a full-size **viewer modal** with prev/next (arrow keys), seed/aspect info, and a download link. By default renders are ComfyUI **temp** files, so the gallery is session-only. Tick **Save renders permanently** to switch the output node to `SaveImage` (files land in ComfyUI's `output/` as `ideogrammar_*.png`); those renders persist in the gallery across reloads (stored in `localStorage`, last 60). **Clear** empties the gallery list only — it never deletes files from `output/`.
 

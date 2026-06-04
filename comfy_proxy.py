@@ -341,8 +341,9 @@ class Handler(BaseHTTPRequestHandler):
                     pass
 
 
-# ---- raster -> hybrid SVG vectorization (lazy deps: pillow, vtracer) -------
-def _is_flat(crop):
+# ---- raster -> hybrid SVG vectorization (lazy deps: pillow, vtracer;        --
+#      optional masking via SAM if configured, else OpenCV GrabCut) -----------
+def _is_flat(crop, threshold=11.0):
     # Cheap "vectorizable?" test: a flat/graphic region is well-approximated by
     # a tiny palette (low reconstruction error); a photo is not.
     from PIL import ImageChops
@@ -350,7 +351,7 @@ def _is_flat(crop):
     approx = small.quantize(colors=16).convert("RGB")
     diff = ImageChops.difference(small, approx).convert("L")
     mean = sum(diff.getdata()) / (96 * 96)
-    return mean < 9.0
+    return mean < threshold
 
 
 def _trace_crop(crop):
@@ -379,18 +380,118 @@ def _trace_crop(crop):
     return (m.group(1) if m else ""), cw, ch
 
 
+# --- masking backends: SAM (preferred, if configured) else OpenCV GrabCut ----
+_SAM_PREDICTOR = None
+_SAM_TRIED = False
+
+def _sam_predictor():
+    """Lazily build a SAM predictor if SAM_CHECKPOINT is set and importable."""
+    global _SAM_PREDICTOR, _SAM_TRIED
+    if _SAM_TRIED:
+        return _SAM_PREDICTOR
+    _SAM_TRIED = True
+    ckpt = os.environ.get("SAM_CHECKPOINT")
+    if not ckpt or not os.path.isfile(ckpt):
+        return None
+    try:
+        import torch
+        from segment_anything import sam_model_registry, SamPredictor
+        mtype = os.environ.get("SAM_MODEL_TYPE", "vit_b")
+        sam = sam_model_registry[mtype](checkpoint=ckpt)
+        sam.to("cuda" if torch.cuda.is_available() else "cpu")
+        _SAM_PREDICTOR = SamPredictor(sam)
+    except Exception:
+        _SAM_PREDICTOR = None
+    return _SAM_PREDICTOR
+
+
+def _sam_mask(crop):
+    pred = _sam_predictor()
+    if pred is None:
+        return None
+    try:
+        import numpy as np
+        arr = np.array(crop.convert("RGB"))
+        h, w = arr.shape[:2]
+        pred.set_image(arr)
+        box = np.array([1, 1, w - 1, h - 1])
+        masks, scores, _ = pred.predict(box=box, multimask_output=True)
+        return masks[int(np.argmax(scores))].astype("uint8")
+    except Exception:
+        return None
+
+
+def _flat_foreground_mask(crop):
+    # For flat regions (text/logos/flat art) the "ink" is what differs from the
+    # local background. Estimate background from the border pixels, then keep
+    # pixels far from it. Works far better than GrabCut for thin glyphs.
+    try:
+        import numpy as np
+    except Exception:
+        return None
+    try:
+        arr = np.array(crop.convert("RGB")).astype("int16")
+        h, w = arr.shape[:2]
+        if w < 8 or h < 8:
+            return None
+        border = np.concatenate([arr[0, :, :], arr[-1, :, :], arr[:, 0, :], arr[:, -1, :]], axis=0)
+        bg = np.median(border, axis=0)
+        dist = np.sqrt(((arr - bg) ** 2).sum(axis=2))
+        m = (dist > 36.0).astype("uint8")
+        frac = float(m.mean())
+        if frac < 0.004 or frac > 0.97:
+            return None  # nothing distinct, or element fills the box -> no clip
+        try:
+            import cv2
+            k = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
+            m = cv2.morphologyEx(m, cv2.MORPH_CLOSE, k, iterations=1)
+            m = cv2.dilate(m, k, iterations=1)
+        except Exception:
+            pass
+        return m
+    except Exception:
+        return None
+
+
+def _region_mask(crop):
+    # SAM if configured (best), else the flat-foreground heuristic.
+    m = _sam_mask(crop)
+    if m is None:
+        m = _flat_foreground_mask(crop)
+    return m
+
+
+def _mask_to_polys(m):
+    import cv2
+    h, w = m.shape[:2]
+    cnts, _ = cv2.findContours((m * 255).astype("uint8"), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    polys, area_min = [], max(4.0, w * h * 0.0008)
+    for c in cnts:
+        if cv2.contourArea(c) < area_min:
+            continue
+        approx = cv2.approxPolyDP(c, max(0.75, 0.004 * cv2.arcLength(c, True)), True)
+        if approx.shape[0] < 3:
+            continue
+        polys.append(" ".join("%d,%d" % (int(p[0][0]), int(p[0][1])) for p in approx))
+    return polys
+
+
 def vectorize_image(img_bytes, elements, options):
     """Build a hybrid SVG: full render as a raster base, flat regions traced to
     vector and overlaid in place. Routing: text/logo always vector, subject/bg
-    always raster, everything else by the flatness heuristic."""
+    always raster, everything else by the flatness heuristic. When masking is
+    enabled (and a backend is available), each vector overlay is clipped to the
+    element's actual shape so it doesn't paint a rectangle over the photo."""
     from PIL import Image
     img = Image.open(io.BytesIO(img_bytes)).convert("RGB")
     W, H = img.size
+    flat_threshold = float(options.get("flat_threshold", 11.0))
+    use_mask = bool(options.get("mask", True))
     flat_types = {"text", "logo"}
     never_types = {"subject", "bg"}
     vec_parts = []
-    stats = {"width": W, "height": H, "vectorized": 0, "raster": 0, "regions": []}
-    for el in elements:
+    stats = {"width": W, "height": H, "vectorized": 0, "raster": 0, "masked": 0, "regions": []}
+    for idx, el in enumerate(elements):
         bbox = el.get("bbox") or []
         if len(bbox) != 4:
             continue
@@ -406,14 +507,25 @@ def vectorize_image(img_bytes, elements, options):
             continue
         t = (el.get("type") or "").lower()
         crop = img.crop((px1, py1, px2, py2))
-        do_vec = (t in flat_types) or (t not in never_types and _is_flat(crop))
+        do_vec = (t in flat_types) or (t not in never_types and _is_flat(crop, flat_threshold))
         region = {"type": t, "x": px1, "y": py1, "w": px2 - px1, "h": py2 - py1, "vector": False}
         if do_vec:
             try:
                 inner, cw, ch = _trace_crop(crop)
+                clip_defs, g_open, g_close = "", "", ""
+                if use_mask:
+                    m = _region_mask(crop)
+                    polys = _mask_to_polys(m) if m is not None else []
+                    if polys:
+                        cid = "vclip%d" % idx
+                        clip_defs = '<defs><clipPath id="%s">%s</clipPath></defs>' % (
+                            cid, "".join('<polygon points="%s"/>' % p for p in polys))
+                        g_open, g_close = '<g clip-path="url(#%s)">' % cid, "</g>"
+                        region["masked"] = True
+                        stats["masked"] += 1
                 vec_parts.append(
-                    '<svg x="%d" y="%d" width="%d" height="%d" viewBox="0 0 %d %d" preserveAspectRatio="none">%s</svg>'
-                    % (px1, py1, px2 - px1, py2 - py1, cw, ch, inner))
+                    '<svg x="%d" y="%d" width="%d" height="%d" viewBox="0 0 %d %d" preserveAspectRatio="none">%s%s%s%s</svg>'
+                    % (px1, py1, px2 - px1, py2 - py1, cw, ch, clip_defs, g_open, inner, g_close))
                 region["vector"] = True
                 stats["vectorized"] += 1
             except Exception as e:
