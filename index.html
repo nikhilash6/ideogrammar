@@ -183,6 +183,7 @@
   .box.selected { z-index: 50; box-shadow: 0 0 0 2px rgba(255,255,255,.6), 0 6px 18px -6px rgba(0,0,0,.5); }
   .handle { position: absolute; width: 11px; height: 11px; background: #fff; border: 1.5px solid var(--accent); border-radius: 3px; }
   .handle.se { right: -6px; bottom: -6px; cursor: nwse-resize; }
+  .box, .handle { touch-action: none; }
   .grid-line { position: absolute; background: rgba(255,255,255,.05); }
   .toggle { display: flex; align-items: center; gap: 7px; margin: 0; color: var(--muted); font-size: 12px; cursor: pointer; }
   .toggle input { width: auto; accent-color: var(--accent); }
@@ -882,8 +883,8 @@ function renderCanvas() {
     handle.className = "handle se"; handle.style.borderColor = col;
     box.appendChild(handle);
 
-    box.addEventListener("mousedown", (e) => startDrag(e, el, "move"));
-    handle.addEventListener("mousedown", (e) => { e.stopPropagation(); startDrag(e, el, "resize"); });
+    box.addEventListener("pointerdown", (e) => { e.stopPropagation(); startDrag(e, el, "move", box); });
+    handle.addEventListener("pointerdown", (e) => { e.stopPropagation(); startDrag(e, el, "resize", box); });
     box.addEventListener("click", (e) => { e.stopPropagation(); selectElement(el._id); });
 
     stage.appendChild(box);
@@ -891,18 +892,22 @@ function renderCanvas() {
 }
 
 let drag = null;
-function startDrag(e, el, mode) {
+function startDrag(e, el, mode, boxEl) {
   e.preventDefault();
   selectElement(el._id);
   const rect = $("stage").getBoundingClientRect();
-  drag = { el, mode, rect, startX: e.clientX, startY: e.clientY, orig: el.bbox.slice() };
-  window.addEventListener("mousemove", onDrag);
-  window.addEventListener("mouseup", endDrag);
+  drag = { el, mode, rect, startX: e.clientX, startY: e.clientY, orig: el.bbox.slice(), boxEl, pointerId: e.pointerId };
+  // Capture the pointer so move/up always reach us (even off-element / fast drags),
+  // and so GridStack can't hijack the gesture.
+  try { boxEl.setPointerCapture(e.pointerId); } catch (_) {}
+  boxEl.addEventListener("pointermove", onDrag);
+  boxEl.addEventListener("pointerup", endDrag);
+  boxEl.addEventListener("pointercancel", endDrag);
 }
 
 function onDrag(e) {
   if (!drag) return;
-  const { el, mode, rect, orig } = drag;
+  const { el, mode, rect, orig, boxEl } = drag;
   const dx = (e.clientX - drag.startX) / rect.width * COORD;
   const dy = (e.clientY - drag.startY) / rect.height * COORD;
   let [x1, y1, x2, y2] = orig;
@@ -916,14 +921,30 @@ function onDrag(e) {
     nx2 = clamp(nx2 + dx, nx1 + 5, COORD); ny2 = clamp(ny2 + dy, ny1 + 5, COORD);
   }
   el.bbox = [Math.round(nx1), Math.round(ny1), Math.round(nx2), Math.round(ny2)];
-  renderCanvas(); renderJSONThrottled(); syncBboxInputs(el);
+  // Update only the dragged box in place — rebuilding the whole stage mid-drag
+  // destroys the element we're dragging.
+  if (boxEl) {
+    const left = Math.min(el.bbox[0], el.bbox[2]), top = Math.min(el.bbox[1], el.bbox[3]);
+    const bw = Math.abs(el.bbox[2] - el.bbox[0]), bh = Math.abs(el.bbox[3] - el.bbox[1]);
+    boxEl.style.left = (left / COORD * 100) + "%";
+    boxEl.style.top = (top / COORD * 100) + "%";
+    boxEl.style.width = (bw / COORD * 100) + "%";
+    boxEl.style.height = (bh / COORD * 100) + "%";
+  }
+  renderJSONThrottled(); syncBboxInputs(el);
 }
 
 function endDrag() {
+  if (!drag) return;
+  const { boxEl, pointerId } = drag;
   drag = null;
-  window.removeEventListener("mousemove", onDrag);
-  window.removeEventListener("mouseup", endDrag);
-  renderJSON(); renderElements();
+  if (boxEl) {
+    try { boxEl.releasePointerCapture(pointerId); } catch (_) {}
+    boxEl.removeEventListener("pointermove", onDrag);
+    boxEl.removeEventListener("pointerup", endDrag);
+    boxEl.removeEventListener("pointercancel", endDrag);
+  }
+  renderCanvas(); renderJSON(); renderElements();
 }
 
 function syncBboxInputs(el) {
