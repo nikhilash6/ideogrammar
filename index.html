@@ -310,7 +310,12 @@
     <button id="resetBtn">Reset</button>
     <button id="copyBtn">Copy JSON</button>
     <button id="downloadBtn">Download</button>
-    <button id="resetLayout" class="ghost" title="Reset the window layout">⊞ Layout</button>
+    <select id="layoutPreset" title="Tiling preset" style="width:auto; padding:7px 10px;">
+      <option value="sidebar">▤ Sidebar + split</option>
+      <option value="columns">▥ Three columns</option>
+      <option value="render">▣ Render focus</option>
+      <option value="quad">▦ Quadrants</option>
+    </select>
   </div>
   <input type="file" id="fileInput" accept=".json,application/json">
 </header>
@@ -489,7 +494,7 @@
   </div>
 
   <!-- CANVAS -->
-  <div class="grid-stack-item" gs-id="canvas" gs-x="3" gs-y="0" gs-w="5" gs-h="8" gs-min-w="2" gs-min-h="3">
+  <div class="grid-stack-item" gs-id="canvas" gs-x="3" gs-y="0" gs-w="5" gs-h="9" gs-min-w="2" gs-min-h="3">
     <div class="grid-stack-item-content tile">
       <div class="tile-bar"><span class="tile-title">Layout preview</span></div>
       <div class="tile-body canvas-body">
@@ -507,7 +512,7 @@
   </div>
 
   <!-- OUTPUT -->
-  <div class="grid-stack-item" gs-id="output" gs-x="3" gs-y="8" gs-w="5" gs-h="4" gs-min-w="2" gs-min-h="3">
+  <div class="grid-stack-item" gs-id="output" gs-x="8" gs-y="0" gs-w="4" gs-h="9" gs-min-w="2" gs-min-h="3">
     <div class="grid-stack-item-content tile">
       <div class="tile-bar"><span class="tile-title">Rendered output</span></div>
       <div class="tile-body">
@@ -529,7 +534,7 @@
   </div>
 
   <!-- JSON -->
-  <div class="grid-stack-item" gs-id="json" gs-x="8" gs-y="0" gs-w="4" gs-h="12" gs-min-w="2" gs-min-h="3">
+  <div class="grid-stack-item" gs-id="json" gs-x="3" gs-y="9" gs-w="9" gs-h="3" gs-min-w="2" gs-min-h="2">
     <div class="grid-stack-item-content tile">
       <div class="tile-bar"><span class="tile-title">JSON output</span></div>
       <div class="tile-body json-body">
@@ -1375,11 +1380,43 @@ function applyCanvasAspect() {
 }
 
 /* ---- GridStack tiled window layout ---- */
-let grid = null, defaultLayout = null;
+let grid = null;
 const LAYOUT_KEY = "ideogram_grid_layout";
+const PRESET_KEY = "ideogram_grid_preset";
+// Each preset tiles the full 12x12 grid with no gaps (maximizes space).
+const PRESETS = {
+  // builder sidebar | canvas + render side by side | low JSON strip below
+  sidebar: [
+    { id: "builder", x: 0, y: 0, w: 3, h: 12 },
+    { id: "canvas",  x: 3, y: 0, w: 5, h: 9 },
+    { id: "output",  x: 8, y: 0, w: 4, h: 9 },
+    { id: "json",    x: 3, y: 9, w: 9, h: 3 },
+  ],
+  // builder | canvas over render | tall JSON column
+  columns: [
+    { id: "builder", x: 0, y: 0, w: 3, h: 12 },
+    { id: "canvas",  x: 3, y: 0, w: 5, h: 8 },
+    { id: "output",  x: 3, y: 8, w: 5, h: 4 },
+    { id: "json",    x: 8, y: 0, w: 4, h: 12 },
+  ],
+  // big render, builder sidebar, canvas + json along the bottom
+  render: [
+    { id: "builder", x: 0, y: 0, w: 3, h: 12 },
+    { id: "output",  x: 3, y: 0, w: 9, h: 8 },
+    { id: "canvas",  x: 3, y: 8, w: 5, h: 4 },
+    { id: "json",    x: 8, y: 8, w: 4, h: 4 },
+  ],
+  // four equal quadrants
+  quad: [
+    { id: "builder", x: 0, y: 0, w: 6, h: 6 },
+    { id: "canvas",  x: 6, y: 0, w: 6, h: 6 },
+    { id: "json",    x: 0, y: 6, w: 6, h: 6 },
+    { id: "output",  x: 6, y: 6, w: 6, h: 6 },
+  ],
+};
 function gridCellHeight() {
   const el = $("grid");
-  return Math.max(40, Math.floor(((el ? el.clientHeight : 720) - 8) / 12));
+  return Math.max(36, Math.floor(((el ? el.clientHeight : 720) - 8) / 12));
 }
 function setupGrid() {
   if (!window.GridStack) return; // offline/failed load -> tiles fall back to a stacked layout
@@ -1389,18 +1426,22 @@ function setupGrid() {
     handle: ".tile-bar",
     resizable: { handles: "e,se,s,sw,w" }
   });
-  defaultLayout = grid.save(false);
-  try { const saved = JSON.parse(localStorage.getItem(LAYOUT_KEY)); if (Array.isArray(saved) && saved.length) grid.load(saved); } catch (_) {}
+  let savedLayout = null, savedPreset = null;
+  try { savedLayout = JSON.parse(localStorage.getItem(LAYOUT_KEY)); } catch (_) {}
+  try { savedPreset = localStorage.getItem(PRESET_KEY); } catch (_) {}
+  if (Array.isArray(savedLayout) && savedLayout.length) grid.load(savedLayout);
+  else applyPreset(savedPreset && PRESETS[savedPreset] ? savedPreset : "sidebar");
+  if (savedPreset && PRESETS[savedPreset]) $("layoutPreset").value = savedPreset;
   grid.on("change", () => { try { localStorage.setItem(LAYOUT_KEY, JSON.stringify(grid.save(false))); } catch (_) {} applyCanvasAspect(); });
   grid.on("resize", applyCanvasAspect);
   window.addEventListener("resize", () => { grid.cellHeight(gridCellHeight()); applyCanvasAspect(); });
 }
-function resetGridLayout() {
-  if (!grid) return;
-  try { localStorage.removeItem(LAYOUT_KEY); } catch (_) {}
-  if (defaultLayout) grid.load(defaultLayout);
+function applyPreset(name) {
+  if (!grid || !PRESETS[name]) return;
+  grid.load(PRESETS[name]);
+  try { localStorage.setItem(LAYOUT_KEY, JSON.stringify(grid.save(false))); localStorage.setItem(PRESET_KEY, name); } catch (_) {}
+  $("layoutPreset").value = name;
   applyCanvasAspect();
-  toast("Layout reset ✓", "ok");
 }
 function syncConnFields() { $("cf-urlRow").style.display = $("cf-direct").checked ? "block" : "none"; }
 function applyComfyForm() {
@@ -1702,7 +1743,7 @@ $("cf-url").addEventListener("input", updateComfyTarget);
 $("cf-direct").addEventListener("change", () => { readComfyForm(); syncConnFields(); updateComfyTarget(); });
 $("cf-aspect").addEventListener("change", applyCanvasAspect);
 window.addEventListener("resize", applyCanvasAspect);
-$("resetLayout").addEventListener("click", resetGridLayout);
+$("layoutPreset").addEventListener("change", e => applyPreset(e.target.value));
 
 // image viewer modal
 $("renderImg").addEventListener("click", () => { if (renderHistory.length) openImgModal(renderHistory.length - 1); });
