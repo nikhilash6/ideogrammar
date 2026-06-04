@@ -211,10 +211,13 @@
 
   input[type=file] { display: none; }
 
-  /* ---------- scrollbars ---------- */
-  .col::-webkit-scrollbar, pre::-webkit-scrollbar { width: 11px; height: 11px; }
-  .col::-webkit-scrollbar-thumb, pre::-webkit-scrollbar-thumb { background: #28323f; border-radius: 8px; border: 3px solid transparent; background-clip: padding-box; }
-  .col::-webkit-scrollbar-thumb:hover, pre::-webkit-scrollbar-thumb:hover { background: #3a4658; background-clip: padding-box; }
+  /* ---------- scrollbars (themed everywhere) ---------- */
+  * { scrollbar-width: thin; scrollbar-color: #2c3848 transparent; }
+  ::-webkit-scrollbar { width: 11px; height: 11px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-corner { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #2c3848; border-radius: 8px; border: 3px solid transparent; background-clip: padding-box; }
+  ::-webkit-scrollbar-thumb:hover { background: #3a4658; background-clip: padding-box; }
 
   /* ---------- modal ---------- */
   .overlay { position: fixed; inset: 0; background: rgba(5,8,12,.7); backdrop-filter: blur(4px); display: none; align-items: center; justify-content: center; z-index: 100; padding: 20px; }
@@ -283,7 +286,8 @@
   .tile-bar::before { content: "⠿"; color: var(--faint); font-size: 12px; line-height: 1; }
   .tile-title { font-size: 11px; text-transform: uppercase; letter-spacing: .12em; color: var(--faint); font-weight: 700; }
   .tile-body { flex: 1; overflow: auto; padding: 14px; min-height: 0; }
-  .tile-body.canvas-body { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+  .tile-body.canvas-body { display: flex; flex-direction: column; align-items: stretch; gap: 8px; padding: 10px; }
+  .canvas-area { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; }
   .tile-body.json-body { display: flex; flex-direction: column; gap: 12px; }
   .tile-body.json-body #json { flex: 1; max-height: none; margin: 0; }
   #outputManualNote { display: none; }
@@ -498,7 +502,7 @@
     <div class="grid-stack-item-content tile">
       <div class="tile-bar"><span class="tile-title">Layout preview</span></div>
       <div class="tile-body canvas-body">
-    <div class="canvas-wrap" id="canvasWrap"><div id="stage"></div></div>
+    <div class="canvas-area" id="canvasArea"><div class="canvas-wrap" id="canvasWrap"><div id="stage"></div></div></div>
     <div class="canvas-meta">
       Origin top-left · X,Y → right, down · 0–1000 per axis<br>
       Drag a box to move · drag the corner to resize · click to select
@@ -1369,9 +1373,9 @@ function applyCanvasAspect() {
   const wrap = $("canvasWrap");
   if (!wrap) return;
   const ar = (comfyCfg.mode === "comfy") ? parseAspectRatio($("cf-aspect").value) : 1;
-  const host = wrap.parentElement; // .tile-body.canvas-body
-  const availW = Math.max(120, (host ? host.clientWidth : 560) - 28);
-  const availH = Math.max(120, (host ? host.clientHeight : 560) - 96); // reserve meta + toggles
+  const host = $("canvasArea") || wrap.parentElement; // flex-fill region
+  const availW = Math.max(80, (host ? host.clientWidth : 560) - 2);
+  const availH = Math.max(80, (host ? host.clientHeight : 560) - 2);
   let w = availW, h = w / ar;
   if (h > availH) { h = availH; w = h * ar; }
   wrap.style.width = Math.round(w) + "px";
