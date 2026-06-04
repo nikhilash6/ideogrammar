@@ -7,3 +7,7 @@ comfy_proxy.log
 
 # SAM model checkpoints (large)
 models/
+
+# python bytecode
+__pycache__/
+*.pyc
