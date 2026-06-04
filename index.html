@@ -1281,6 +1281,21 @@ function comfyBase() {
   return (comfyCfg.url || "").trim().replace(/\/+$/, "");
 }
 
+// Keep a value if it's a finite number within [lo,hi]; otherwise fall back to
+// the default. Guards against out-of-range params that ComfyUI would reject.
+function numInRange(v, lo, hi, dflt) {
+  const n = parseFloat(v);
+  return (isFinite(n) && n >= lo && n <= hi) ? n : dflt;
+}
+function sanitizeComfyCfg() {
+  comfyCfg.megapixels   = numInRange(comfyCfg.megapixels, 0.1, 16, 2);
+  comfyCfg.cfg          = numInRange(comfyCfg.cfg, 0, 100, 7);
+  comfyCfg.cfg_override = numInRange(comfyCfg.cfg_override, 0, 100, 3);
+  comfyCfg.start_percent = numInRange(comfyCfg.start_percent, 0, 1, 0.9);
+  comfyCfg.end_percent   = numInRange(comfyCfg.end_percent, 0, 1, 1);
+  comfyCfg.batch_size   = Math.round(numInRange(comfyCfg.batch_size, 1, 64, 1));
+}
+
 function getClientId() {
   let id = localStorage.getItem("ideogram_comfy_client");
   if (!id) { id = "ideogrammar-" + Date.now().toString(36) + Math.random().toString(36).slice(2, 10); localStorage.setItem("ideogram_comfy_client", id); }
@@ -1343,21 +1358,29 @@ function readComfyForm() {
   comfyCfg.save = $("cf-save").checked;
   comfyCfg.url = $("cf-url").value.trim();
   comfyCfg.aspect_ratio = $("cf-aspect").value.trim();
-  comfyCfg.megapixels = parseFloat($("cf-megapixels").value) || 0;
+  comfyCfg.megapixels = parseFloat($("cf-megapixels").value);
   comfyCfg.preset = $("cf-preset").value;
   comfyCfg.seed = clampSeed($("cf-seed").value);
   comfyCfg.randomize = $("cf-randomize").checked;
-  comfyCfg.cfg = parseFloat($("cf-cfg").value) || 0;
+  comfyCfg.cfg = parseFloat($("cf-cfg").value);
   comfyCfg.sampler_name = $("cf-sampler").value.trim();
-  comfyCfg.cfg_override = parseFloat($("cf-cfgo").value) || 0;
-  comfyCfg.start_percent = parseFloat($("cf-start").value) || 0;
-  comfyCfg.end_percent = parseFloat($("cf-end").value) || 0;
+  comfyCfg.cfg_override = parseFloat($("cf-cfgo").value);
+  comfyCfg.start_percent = parseFloat($("cf-start").value);
+  comfyCfg.end_percent = parseFloat($("cf-end").value);
   comfyCfg.diff_model = $("cf-diff").value.trim();
   comfyCfg.uncond_model = $("cf-uncond").value.trim();
   comfyCfg.vae_name = $("cf-vae").value.trim();
   comfyCfg.clip_name = $("cf-clip").value.trim();
   comfyCfg.clip_type = $("cf-cliptype").value.trim();
-  comfyCfg.batch_size = parseInt($("cf-batch").value, 10) || 1;
+  comfyCfg.batch_size = parseInt($("cf-batch").value, 10);
+  sanitizeComfyCfg();
+  // reflect any corrected numeric values back into the fields
+  $("cf-megapixels").value = comfyCfg.megapixels;
+  $("cf-cfg").value = comfyCfg.cfg;
+  $("cf-cfgo").value = comfyCfg.cfg_override;
+  $("cf-start").value = comfyCfg.start_percent;
+  $("cf-end").value = comfyCfg.end_percent;
+  $("cf-batch").value = comfyCfg.batch_size;
   saveComfyCfg();
 }
 
@@ -1631,6 +1654,8 @@ $("cf-rerollSeed").addEventListener("click", () => { comfyCfg.seed = randomSeed(
   const e = $(id); if (e) e.addEventListener("change", readComfyForm);
 });
 
+sanitizeComfyCfg();
+saveComfyCfg();
 applyComfyForm();
 updateComfyTarget();
 loadRenderHistory();
