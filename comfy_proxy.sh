@@ -111,6 +111,8 @@ WorkingDirectory=$DIR
 ExecStart=$PYTHON $DIR/comfy_proxy.py --host $PROXY_HOST --port $PROXY_PORT --comfy $COMFY_URL
 Restart=on-failure
 RestartSec=3
+$( [ -n "${SAM_CHECKPOINT:-}" ] && echo "Environment=SAM_CHECKPOINT=$SAM_CHECKPOINT" )
+$( [ -n "${SAM_CHECKPOINT:-}" ] && echo "Environment=SAM_MODEL_TYPE=${SAM_MODEL_TYPE:-vit_b}" )
 $( [ "$SERVICE_SCOPE" = system ] && echo "User=$(id -un)" )
 
 [Install]

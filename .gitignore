@@ -4,3 +4,6 @@ comfy_proxy.log
 
 # python venv for proxy vectorizer deps
 .venv/
+
+# SAM model checkpoints (large)
+models/
