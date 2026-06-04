@@ -1,3 +1,6 @@
 # proxy runtime files
 comfy_proxy.pid
 comfy_proxy.log
+
+# python venv for proxy vectorizer deps
+.venv/

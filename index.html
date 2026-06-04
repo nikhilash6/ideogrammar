@@ -528,6 +528,7 @@
       </div>
       <div class="progress"><div id="renderBar"></div></div>
       <div class="render-row"><span class="status" id="renderStatus"></span></div>
+      <div class="render-row"><button id="vectorizeBtn" title="Trace flat regions (text/logos/flat art) to vector, keep photographic parts as raster">⬡ Vectorize → SVG</button><span class="status" id="vectorizeStatus" style="flex:1;"></span></div>
       <div id="galleryRow" style="display:none; flex-direction:column; align-items:stretch; gap:6px; width:100%;">
         <div class="col-title" style="margin:6px 0 0; display:flex; align-items:center; gap:8px;">History <span id="galleryCount" class="count"></span><span style="flex:1"></span><button id="galleryClear" title="Clear gallery list (does not delete files)" style="padding:2px 9px; font-size:11px; text-transform:none; letter-spacing:0;">Clear</button></div>
         <div class="gallery" id="gallery"></div>
@@ -1643,7 +1644,7 @@ async function showResult(base, promptId) {
   let img = null;
   for (const nodeId of Object.keys(outputs)) { const o = outputs[nodeId]; if (o.images && o.images.length) { img = o.images[o.images.length - 1]; break; } }
   if (!img) throw new Error("Render finished but produced no image.");
-  const entry = { filename: img.filename, subfolder: img.subfolder || "", type: img.type || "output", seed: comfyCfg.seed, aspect: comfyCfg.aspect_ratio, time: new Date().toLocaleTimeString() };
+  const entry = { filename: img.filename, subfolder: img.subfolder || "", type: img.type || "output", seed: comfyCfg.seed, aspect: comfyCfg.aspect_ratio, time: new Date().toLocaleTimeString(), elements: state.elements.map(e => ({ type: e.type, bbox: e.bbox.slice() })) };
   const el = $("renderImg");
   el.onload = () => { el.style.display = "block"; $("renderPlaceholder").style.display = "none"; };
   el.onerror = () => setRenderStatus("Image rendered but could not be loaded from " + comfyBase() + "/view", "err");
@@ -1709,6 +1710,45 @@ function openImgModal(index) {
 }
 function closeImgModal() { $("imgOverlay").classList.remove("show"); }
 function stepImg(d) { openImgModal(viewerIndex + d); }
+
+/* ---- vectorize (raster -> hybrid SVG via the proxy /vectorize endpoint) ---- */
+let lastSvgUrl = null;
+function setVecStatus(html, cls) { const s = $("vectorizeStatus"); s.innerHTML = html; s.className = "status" + (cls ? " " + cls : ""); }
+async function vectorizeLast() {
+  if (!renderHistory.length) { setVecStatus("Render an image first.", "err"); return; }
+  const entry = renderHistory[renderHistory.length - 1];
+  const base = comfyBase();
+  if (!base) { setVecStatus("Set a server / run the proxy first.", "err"); return; }
+  const elements = entry.elements && entry.elements.length ? entry.elements : state.elements.map(e => ({ type: e.type, bbox: e.bbox.slice() }));
+  $("vectorizeBtn").disabled = true;
+  setVecStatus('<span class="spinner"></span>Vectorizing…', "");
+  try {
+    const res = await fetch(base + "/vectorize", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ src: { filename: entry.filename, subfolder: entry.subfolder, type: entry.type }, elements })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || ("HTTP " + res.status));
+    openSvgViewer(data.svg, data.stats);
+    const s = data.stats || {};
+    setVecStatus(`${s.vectorized || 0} region(s) vectorized · ${s.raster || 0} kept raster ✓`, "ok");
+  } catch (err) {
+    let msg = err.message || String(err);
+    if (err instanceof TypeError) msg = "Couldn't reach the vectorizer at " + base + ".";
+    setVecStatus(msg, "err");
+  } finally {
+    $("vectorizeBtn").disabled = false;
+  }
+}
+function openSvgViewer(svgText, stats) {
+  if (lastSvgUrl) { try { URL.revokeObjectURL(lastSvgUrl); } catch (_) {} }
+  lastSvgUrl = URL.createObjectURL(new Blob([svgText], { type: "image/svg+xml" }));
+  $("imgFull").src = lastSvgUrl;
+  $("imgInfo").textContent = "Vectorized SVG" + (stats ? ` · ${stats.vectorized} vector / ${stats.raster} raster · ${stats.width}×${stats.height}` : "");
+  $("imgDownload").href = lastSvgUrl; $("imgDownload").download = "ideogram-vector.svg";
+  $("imgPrev").style.visibility = "hidden"; $("imgNext").style.visibility = "hidden";
+  $("imgOverlay").classList.add("show");
+}
 
 let testing = false;
 async function comfyTest() {
@@ -1777,6 +1817,7 @@ $("renderImg").addEventListener("click", () => { if (renderHistory.length) openI
 $("imgPrev").addEventListener("click", () => stepImg(-1));
 $("imgNext").addEventListener("click", () => stepImg(1));
 $("imgClose").addEventListener("click", closeImgModal);
+$("vectorizeBtn").addEventListener("click", vectorizeLast);
 $("galleryClear").addEventListener("click", () => { if (renderHistory.length && confirm("Clear the render gallery? This only clears the list here — files in ComfyUI's output/ are not deleted.")) clearRenderHistory(); });
 let imgOverlayPressedSelf = false;
 $("imgOverlay").addEventListener("mousedown", e => { imgOverlayPressedSelf = (e.target === $("imgOverlay")); });

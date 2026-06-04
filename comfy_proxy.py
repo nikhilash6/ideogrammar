@@ -30,14 +30,17 @@ import argparse
 import base64
 import hashlib
 import http.client
+import io
+import json
 import mimetypes
 import os
+import re
 import select
 import socket
 import sys
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from urllib.parse import urlsplit, unquote
+from urllib.parse import urlsplit, unquote, urlencode
 
 WS_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 HOP_BY_HOP = {
@@ -99,6 +102,63 @@ class Handler(BaseHTTPRequestHandler):
             return None  # path traversal guard
         return cand if os.path.isfile(cand) else None
 
+    def _json_error(self, code, msg):
+        body = json.dumps({"error": msg}).encode()
+        self.send_response(code)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self._cors()
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _fetch_comfy_view(self, src):
+        host, port = comfy_host_port()
+        q = urlencode({
+            "filename": src.get("filename", ""),
+            "subfolder": src.get("subfolder", ""),
+            "type": src.get("type", "output"),
+        })
+        try:
+            conn = http.client.HTTPConnection(host, port, timeout=ARGS.timeout)
+            conn.request("GET", "/view?" + q)
+            r = conn.getresponse()
+            data = r.read()
+            conn.close()
+            return data if r.status == 200 else None
+        except Exception:
+            return None
+
+    def _vectorize(self):
+        length = int(self.headers.get("Content-Length", 0) or 0)
+        raw = self.rfile.read(length) if length else b"{}"
+        try:
+            req = json.loads(raw or b"{}")
+        except Exception:
+            self._json_error(400, "Invalid JSON body")
+            return
+        try:
+            import PIL  # noqa: F401
+            import vtracer  # noqa: F401
+        except Exception as e:
+            self._json_error(501, "Vectorizer dependencies missing. On the host running comfy_proxy.py: pip install --user vtracer pillow, then restart the proxy. [%s]" % e)
+            return
+        img_bytes = self._fetch_comfy_view(req.get("src") or {})
+        if img_bytes is None:
+            self._json_error(502, "Could not fetch the source image from ComfyUI")
+            return
+        try:
+            svg, stats = vectorize_image(img_bytes, req.get("elements") or [], req.get("options") or {})
+        except Exception as e:
+            self._json_error(500, "Vectorize failed: %s" % e)
+            return
+        body = json.dumps({"svg": svg, "stats": stats}).encode()
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self._cors()
+        self.end_headers()
+        self.wfile.write(body)
+
     def _serve_file(self, fpath):
         ctype = mimetypes.guess_type(fpath)[0] or "application/octet-stream"
         try:
@@ -137,6 +197,9 @@ class Handler(BaseHTTPRequestHandler):
         self._proxy()
 
     def do_POST(self):
+        if self.path.split("?", 1)[0] == "/vectorize":
+            self._vectorize()
+            return
         self._proxy()
 
     def do_PUT(self):
@@ -276,6 +339,97 @@ class Handler(BaseHTTPRequestHandler):
                     s.close()
                 except OSError:
                     pass
+
+
+# ---- raster -> hybrid SVG vectorization (lazy deps: pillow, vtracer) -------
+def _is_flat(crop):
+    # Cheap "vectorizable?" test: a flat/graphic region is well-approximated by
+    # a tiny palette (low reconstruction error); a photo is not.
+    from PIL import ImageChops
+    small = crop.resize((96, 96))
+    approx = small.quantize(colors=16).convert("RGB")
+    diff = ImageChops.difference(small, approx).convert("L")
+    mean = sum(diff.getdata()) / (96 * 96)
+    return mean < 9.0
+
+
+def _trace_crop(crop):
+    import vtracer
+    cw, ch = crop.size
+    buf = io.BytesIO()
+    crop.save(buf, format="PNG")
+    data = buf.getvalue()
+    try:
+        svg = vtracer.convert_raw_image_to_svg(data, img_format="png", colormode="color")
+    except TypeError:
+        import tempfile
+        with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as f:
+            f.write(data)
+            inp = f.name
+        outp = inp + ".svg"
+        vtracer.convert_image_to_svg_py(inp, outp)
+        with open(outp) as fh:
+            svg = fh.read()
+        for p in (inp, outp):
+            try:
+                os.unlink(p)
+            except OSError:
+                pass
+    m = re.search(r"<svg[^>]*>(.*)</svg>", svg, re.S)
+    return (m.group(1) if m else ""), cw, ch
+
+
+def vectorize_image(img_bytes, elements, options):
+    """Build a hybrid SVG: full render as a raster base, flat regions traced to
+    vector and overlaid in place. Routing: text/logo always vector, subject/bg
+    always raster, everything else by the flatness heuristic."""
+    from PIL import Image
+    img = Image.open(io.BytesIO(img_bytes)).convert("RGB")
+    W, H = img.size
+    flat_types = {"text", "logo"}
+    never_types = {"subject", "bg"}
+    vec_parts = []
+    stats = {"width": W, "height": H, "vectorized": 0, "raster": 0, "regions": []}
+    for el in elements:
+        bbox = el.get("bbox") or []
+        if len(bbox) != 4:
+            continue
+        try:
+            x1, y1, x2, y2 = [float(v) for v in bbox]
+        except Exception:
+            continue
+        px1 = max(0, min(W, round(min(x1, x2) / 1000.0 * W)))
+        px2 = max(0, min(W, round(max(x1, x2) / 1000.0 * W)))
+        py1 = max(0, min(H, round(min(y1, y2) / 1000.0 * H)))
+        py2 = max(0, min(H, round(max(y1, y2) / 1000.0 * H)))
+        if px2 - px1 < 4 or py2 - py1 < 4:
+            continue
+        t = (el.get("type") or "").lower()
+        crop = img.crop((px1, py1, px2, py2))
+        do_vec = (t in flat_types) or (t not in never_types and _is_flat(crop))
+        region = {"type": t, "x": px1, "y": py1, "w": px2 - px1, "h": py2 - py1, "vector": False}
+        if do_vec:
+            try:
+                inner, cw, ch = _trace_crop(crop)
+                vec_parts.append(
+                    '<svg x="%d" y="%d" width="%d" height="%d" viewBox="0 0 %d %d" preserveAspectRatio="none">%s</svg>'
+                    % (px1, py1, px2 - px1, py2 - py1, cw, ch, inner))
+                region["vector"] = True
+                stats["vectorized"] += 1
+            except Exception as e:
+                region["error"] = str(e)
+                stats["raster"] += 1
+        else:
+            stats["raster"] += 1
+        stats["regions"].append(region)
+    buf = io.BytesIO()
+    img.save(buf, format="JPEG", quality=90)
+    b64 = base64.b64encode(buf.getvalue()).decode()
+    parts = ['<svg xmlns="http://www.w3.org/2000/svg" width="%d" height="%d" viewBox="0 0 %d %d">' % (W, H, W, H)]
+    parts.append('<image x="0" y="0" width="%d" height="%d" href="data:image/jpeg;base64,%s"/>' % (W, H, b64))
+    parts.extend(vec_parts)
+    parts.append("</svg>")
+    return "".join(parts), stats
 
 
 def main():
