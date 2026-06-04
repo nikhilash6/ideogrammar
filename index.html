@@ -183,7 +183,6 @@
   .box.selected { z-index: 50; box-shadow: 0 0 0 2px rgba(255,255,255,.6), 0 6px 18px -6px rgba(0,0,0,.5); }
   .handle { position: absolute; width: 11px; height: 11px; background: #fff; border: 1.5px solid var(--accent); border-radius: 3px; }
   .handle.se { right: -6px; bottom: -6px; cursor: nwse-resize; }
-  .canvas-meta { font-size: 11px; color: var(--muted); text-align: center; line-height: 1.6; }
   .grid-line { position: absolute; background: rgba(255,255,255,.05); }
   .toggle { display: flex; align-items: center; gap: 7px; margin: 0; color: var(--muted); font-size: 12px; cursor: pointer; }
   .toggle input { width: auto; accent-color: var(--accent); }
@@ -288,6 +287,8 @@
   .tile-body { flex: 1; overflow: auto; padding: 14px; min-height: 0; }
   .tile-body.canvas-body { display: flex; flex-direction: column; align-items: stretch; gap: 8px; padding: 10px; }
   .canvas-area { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; }
+  .tile-bar-controls { margin-left: auto; display: flex; align-items: center; gap: 12px; cursor: default; }
+  .tile-bar-controls .toggle { margin: 0; font-size: 11px; }
   .tile-body.json-body { display: flex; flex-direction: column; gap: 12px; }
   .tile-body.json-body #json { flex: 1; max-height: none; margin: 0; }
   #outputManualNote { display: none; }
@@ -500,17 +501,15 @@
   <!-- CANVAS -->
   <div class="grid-stack-item" gs-id="canvas" gs-x="3" gs-y="0" gs-w="5" gs-h="9" gs-min-w="2" gs-min-h="3">
     <div class="grid-stack-item-content tile">
-      <div class="tile-bar"><span class="tile-title">Layout preview</span></div>
+      <div class="tile-bar">
+        <span class="tile-title">Layout preview</span>
+        <div class="tile-bar-controls" id="canvasControls">
+          <label class="toggle"><input type="checkbox" id="gridToggle" checked> Grid</label>
+          <label class="toggle"><input type="checkbox" id="labelToggle" checked> Labels</label>
+        </div>
+      </div>
       <div class="tile-body canvas-body">
-    <div class="canvas-area" id="canvasArea"><div class="canvas-wrap" id="canvasWrap"><div id="stage"></div></div></div>
-    <div class="canvas-meta">
-      Origin top-left · X,Y → right, down · 0–1000 per axis<br>
-      Drag a box to move · drag the corner to resize · click to select
-    </div>
-    <div class="btn-row">
-      <label class="toggle"><input type="checkbox" id="gridToggle" checked> Show grid</label>
-      <label class="toggle"><input type="checkbox" id="labelToggle" checked> Show labels</label>
-    </div>
+        <div class="canvas-area" id="canvasArea"><div class="canvas-wrap" id="canvasWrap"><div id="stage"></div></div></div>
       </div>
     </div>
   </div>
@@ -1748,6 +1747,9 @@ $("cf-direct").addEventListener("change", () => { readComfyForm(); syncConnField
 $("cf-aspect").addEventListener("change", applyCanvasAspect);
 window.addEventListener("resize", applyCanvasAspect);
 $("layoutPreset").addEventListener("change", e => applyPreset(e.target.value));
+// keep the in-titlebar toggles clickable without starting a window drag
+["pointerdown", "mousedown", "touchstart"].forEach(ev =>
+  $("canvasControls").addEventListener(ev, e => e.stopPropagation()));
 
 // image viewer modal
 $("renderImg").addEventListener("click", () => { if (renderHistory.length) openImgModal(renderHistory.length - 1); });
