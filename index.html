@@ -932,7 +932,12 @@ function renderCanvas() {
 let drag = null;
 function startDrag(e, el, mode, boxEl) {
   e.preventDefault();
-  selectElement(el._id);
+  // Select WITHOUT rebuilding the stage — a full renderCanvas() here would
+  // detach boxEl before pointer capture / move listeners attach to it.
+  selectedId = el._id;
+  document.querySelectorAll("#stage .box.selected").forEach(b => b.classList.remove("selected"));
+  boxEl.classList.add("selected");
+  renderElements();
   const rect = $("stage").getBoundingClientRect();
   drag = { el, mode, rect, startX: e.clientX, startY: e.clientY, orig: el.bbox.slice(), boxEl, pointerId: e.pointerId };
   // Capture the pointer so move/up always reach us (even off-element / fast drags),
