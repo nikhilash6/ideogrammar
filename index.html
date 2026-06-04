@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Ideogrammar — Ideogram 4 Prompt Editor</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2032%2032'%3E%3Cdefs%3E%3ClinearGradient%20id='g'%20x1='0'%20y1='0'%20x2='1'%20y2='1'%3E%3Cstop%20offset='0'%20stop-color='%236366f1'/%3E%3Cstop%20offset='1'%20stop-color='%23a855f7'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect%20width='32'%20height='32'%20rx='5'%20fill='url(%23g)'/%3E%3Ctext%20x='16'%20y='23'%20font-family='Arial,Helvetica,sans-serif'%20font-size='21'%20font-weight='bold'%20fill='%23fff'%20text-anchor='middle'%3EI%3C/text%3E%3C/svg%3E">
+<link rel="stylesheet" href="vendor/gridstack.min.css">
+<script src="vendor/gridstack-all.js"></script>
 <style>
   :root {
     --bg: #0a0d13;
@@ -174,7 +176,7 @@
   .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 
   /* ---------- canvas ---------- */
-  .canvas-wrap { position: relative; width: 100%; max-width: 580px; aspect-ratio: 1/1; background: #0d1119; border-radius: var(--r); overflow: hidden; box-shadow: var(--shadow), 0 0 0 1px var(--border); flex-shrink: 0; }
+  .canvas-wrap { position: relative; background: #0d1119; border-radius: var(--r); overflow: hidden; box-shadow: var(--shadow), 0 0 0 1px var(--border); flex-shrink: 0; }
   #stage { position: absolute; inset: 0; }
   .box { position: absolute; border: 2px solid var(--accent); background: rgba(99,102,241,.1); cursor: move; font-size: 11px; color: #fff; overflow: visible; border-radius: 2px; transition: box-shadow .1s; }
   .box .lbl { position: absolute; top: 0; left: 0; padding: 2px 6px; font-size: 10px; font-weight: 600; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; border-radius: 0 0 5px 0; pointer-events: none; }
@@ -269,6 +271,24 @@
   .img-bar .spacer { flex: 1; }
   .img-bar a, .img-bar button { color: var(--text); text-decoration: none; background: var(--elevated); border: 1px solid var(--border-strong); border-radius: var(--r-sm); padding: 6px 12px; font-size: 12px; font-weight: 500; cursor: pointer; }
   .img-bar a:hover, .img-bar button:hover { background: #222c3c; }
+
+  /* ---------- gridstack tiled windows ---------- */
+  .grid-stack { flex: 1; min-height: 0; overflow: auto; padding: 4px; }
+  .grid-stack-item-content { overflow: hidden; inset: 0; }
+  .tile { display: flex; flex-direction: column; height: 100%;
+    background: linear-gradient(180deg, var(--panel), var(--panel-2));
+    border: 1px solid var(--border); border-radius: var(--r); overflow: hidden; }
+  .tile-bar { display: flex; align-items: center; gap: 8px; padding: 8px 12px; cursor: move;
+    background: rgba(255,255,255,.025); border-bottom: 1px solid var(--border); user-select: none; flex-shrink: 0; }
+  .tile-bar::before { content: "⠿"; color: var(--faint); font-size: 12px; line-height: 1; }
+  .tile-title { font-size: 11px; text-transform: uppercase; letter-spacing: .12em; color: var(--faint); font-weight: 700; }
+  .tile-body { flex: 1; overflow: auto; padding: 14px; min-height: 0; }
+  .tile-body.canvas-body { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+  .tile-body.json-body { display: flex; flex-direction: column; gap: 12px; }
+  .tile-body.json-body #json { flex: 1; max-height: none; margin: 0; }
+  #outputManualNote { display: none; }
+  body:not(.comfy-mode) #outputManualNote { display: block; }
+  .grid-stack-item > .ui-resizable-handle { filter: none; }
 </style>
 </head>
 <body>
@@ -290,14 +310,18 @@
     <button id="resetBtn">Reset</button>
     <button id="copyBtn">Copy JSON</button>
     <button id="downloadBtn">Download</button>
+    <button id="resetLayout" class="ghost" title="Reset the window layout">⊞ Layout</button>
   </div>
   <input type="file" id="fileInput" accept=".json,application/json">
 </header>
 
-<div class="layout">
-  <!-- LEFT: form -->
-  <div class="col" id="formCol">
-    <div class="col-title">Prompt builder</div>
+<div class="grid-stack" id="grid">
+
+  <!-- BUILDER -->
+  <div class="grid-stack-item" gs-id="builder" gs-x="0" gs-y="0" gs-w="3" gs-h="12" gs-min-w="2" gs-min-h="3">
+    <div class="grid-stack-item-content tile">
+      <div class="tile-bar"><span class="tile-title">Prompt builder</span></div>
+      <div class="tile-body" id="formCol">
 
     <section class="panel" data-collapsible>
       <div class="panel-head"><span class="chev">▶</span><h2>High level description</h2></div>
@@ -460,11 +484,15 @@
         <div class="hint">Renders the current prompt on your ComfyUI server using the bundled Ideogram 4 workflow; the result shows in the middle panel.<br><br><b>Recommended:</b> run <code>comfy_proxy.py</code> on a host that can reach ComfyUI and open this editor from the address it prints (e.g. <code>http://192.168.2.35:8189/</code>). Leave "Connect directly" unchecked — the proxy forwards everything, so there's no CORS. Only tick "Connect directly" if ComfyUI itself runs with <code>--enable-cors-header</code>.</div>
       </div>
     </section>
+      </div>
+    </div>
   </div>
 
-  <!-- MIDDLE: canvas -->
-  <div class="col canvas-col">
-    <div class="col-title" style="align-self:flex-start;">Layout preview</div>
+  <!-- CANVAS -->
+  <div class="grid-stack-item" gs-id="canvas" gs-x="3" gs-y="0" gs-w="5" gs-h="8" gs-min-w="2" gs-min-h="3">
+    <div class="grid-stack-item-content tile">
+      <div class="tile-bar"><span class="tile-title">Layout preview</span></div>
+      <div class="tile-body canvas-body">
     <div class="canvas-wrap" id="canvasWrap"><div id="stage"></div></div>
     <div class="canvas-meta">
       Origin top-left · X,Y → right, down · 0–1000 per axis<br>
@@ -474,9 +502,17 @@
       <label class="toggle"><input type="checkbox" id="gridToggle" checked> Show grid</label>
       <label class="toggle"><input type="checkbox" id="labelToggle" checked> Show labels</label>
     </div>
+      </div>
+    </div>
+  </div>
 
-    <div class="render-panel comfy-only" id="renderResult">
-      <div class="col-title" style="align-self:flex-start; margin-top:6px;">Rendered result</div>
+  <!-- OUTPUT -->
+  <div class="grid-stack-item" gs-id="output" gs-x="3" gs-y="8" gs-w="5" gs-h="4" gs-min-w="2" gs-min-h="3">
+    <div class="grid-stack-item-content tile">
+      <div class="tile-bar"><span class="tile-title">Rendered output</span></div>
+      <div class="tile-body">
+        <div class="render-placeholder" id="outputManualNote">Switch to <b>ComfyUI</b> mode (top-right) to render here.</div>
+        <div class="render-panel comfy-only" id="renderResult">
       <div class="render-img-wrap" id="renderImgWrap">
         <div class="render-placeholder" id="renderPlaceholder">Set parameters on the left and press <b>Render</b>.</div>
         <img id="renderImg" alt="rendered result" title="Click to enlarge">
@@ -487,18 +523,25 @@
         <div class="col-title" style="margin:6px 0 0; display:flex; align-items:center; gap:8px;">History <span id="galleryCount" class="count"></span><span style="flex:1"></span><button id="galleryClear" title="Clear gallery list (does not delete files)" style="padding:2px 9px; font-size:11px; text-transform:none; letter-spacing:0;">Clear</button></div>
         <div class="gallery" id="gallery"></div>
       </div>
+        </div>
+      </div>
     </div>
   </div>
 
-  <!-- RIGHT: json -->
-  <div class="col json-col">
-    <div class="col-title">JSON output</div>
-    <div class="json-toolbar">
-      <button id="copyBtn2" class="primary">Copy</button>
-      <button id="downloadBtn2">Download .json</button>
+  <!-- JSON -->
+  <div class="grid-stack-item" gs-id="json" gs-x="8" gs-y="0" gs-w="4" gs-h="12" gs-min-w="2" gs-min-h="3">
+    <div class="grid-stack-item-content tile">
+      <div class="tile-bar"><span class="tile-title">JSON output</span></div>
+      <div class="tile-body json-body">
+        <div class="json-toolbar">
+          <button id="copyBtn2" class="primary">Copy</button>
+          <button id="downloadBtn2">Download .json</button>
+        </div>
+        <pre id="json"></pre>
+      </div>
     </div>
-    <pre id="json"></pre>
   </div>
+
 </div>
 
 <!-- GENERATE MODAL -->
@@ -1321,12 +1364,43 @@ function applyCanvasAspect() {
   const wrap = $("canvasWrap");
   if (!wrap) return;
   const ar = (comfyCfg.mode === "comfy") ? parseAspectRatio($("cf-aspect").value) : 1;
-  const maxW = 580, maxH = Math.max(260, window.innerHeight * 0.6);
-  let w = maxW, h = w / ar;
-  if (h > maxH) { h = maxH; w = h * ar; }
+  const host = wrap.parentElement; // .tile-body.canvas-body
+  const availW = Math.max(120, (host ? host.clientWidth : 560) - 28);
+  const availH = Math.max(120, (host ? host.clientHeight : 560) - 96); // reserve meta + toggles
+  let w = availW, h = w / ar;
+  if (h > availH) { h = availH; w = h * ar; }
   wrap.style.width = Math.round(w) + "px";
   wrap.style.height = Math.round(h) + "px";
   renderCanvas();
+}
+
+/* ---- GridStack tiled window layout ---- */
+let grid = null, defaultLayout = null;
+const LAYOUT_KEY = "ideogram_grid_layout";
+function gridCellHeight() {
+  const el = $("grid");
+  return Math.max(40, Math.floor(((el ? el.clientHeight : 720) - 8) / 12));
+}
+function setupGrid() {
+  if (!window.GridStack) return; // offline/failed load -> tiles fall back to a stacked layout
+  grid = GridStack.init({
+    column: 12, margin: 5, float: true,
+    cellHeight: gridCellHeight(),
+    handle: ".tile-bar",
+    resizable: { handles: "e,se,s,sw,w" }
+  });
+  defaultLayout = grid.save(false);
+  try { const saved = JSON.parse(localStorage.getItem(LAYOUT_KEY)); if (Array.isArray(saved) && saved.length) grid.load(saved); } catch (_) {}
+  grid.on("change", () => { try { localStorage.setItem(LAYOUT_KEY, JSON.stringify(grid.save(false))); } catch (_) {} applyCanvasAspect(); });
+  grid.on("resize", applyCanvasAspect);
+  window.addEventListener("resize", () => { grid.cellHeight(gridCellHeight()); applyCanvasAspect(); });
+}
+function resetGridLayout() {
+  if (!grid) return;
+  try { localStorage.removeItem(LAYOUT_KEY); } catch (_) {}
+  if (defaultLayout) grid.load(defaultLayout);
+  applyCanvasAspect();
+  toast("Layout reset ✓", "ok");
 }
 function syncConnFields() { $("cf-urlRow").style.display = $("cf-direct").checked ? "block" : "none"; }
 function applyComfyForm() {
@@ -1628,6 +1702,7 @@ $("cf-url").addEventListener("input", updateComfyTarget);
 $("cf-direct").addEventListener("change", () => { readComfyForm(); syncConnFields(); updateComfyTarget(); });
 $("cf-aspect").addEventListener("change", applyCanvasAspect);
 window.addEventListener("resize", applyCanvasAspect);
+$("resetLayout").addEventListener("click", resetGridLayout);
 
 // image viewer modal
 $("renderImg").addEventListener("click", () => { if (renderHistory.length) openImgModal(renderHistory.length - 1); });
@@ -1654,6 +1729,7 @@ $("cf-rerollSeed").addEventListener("click", () => { comfyCfg.seed = randomSeed(
   const e = $(id); if (e) e.addEventListener("change", readComfyForm);
 });
 
+setupGrid();
 sanitizeComfyCfg();
 saveComfyCfg();
 applyComfyForm();
@@ -1662,6 +1738,7 @@ loadRenderHistory();
 renderGallery();
 applyMode();
 render();
+applyCanvasAspect();
 </script>
 </body>
 </html>

@@ -30,13 +30,14 @@ import argparse
 import base64
 import hashlib
 import http.client
+import mimetypes
 import os
 import select
 import socket
 import sys
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from urllib.parse import urlsplit
+from urllib.parse import urlsplit, unquote
 
 WS_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 HOP_BY_HOP = {
@@ -86,6 +87,34 @@ class Handler(BaseHTTPRequestHandler):
         up = self.headers.get("Upgrade", "")
         return up.lower() == "websocket"
 
+    def _local_file(self, path):
+        # Map a request path to an existing file next to index.html (for vendored
+        # assets like vendor/gridstack-all.js). Returns None if no safe match.
+        rel = unquote(path.split("?", 1)[0]).lstrip("/")
+        if not rel:
+            return None
+        base = os.path.dirname(os.path.abspath(ARGS.html))
+        cand = os.path.normpath(os.path.join(base, rel))
+        if cand != base and not cand.startswith(base + os.sep):
+            return None  # path traversal guard
+        return cand if os.path.isfile(cand) else None
+
+    def _serve_file(self, fpath):
+        ctype = mimetypes.guess_type(fpath)[0] or "application/octet-stream"
+        try:
+            with open(fpath, "rb") as f:
+                body = f.read()
+        except OSError as e:
+            self.send_error(500, "Cannot read %s: %s" % (fpath, e))
+            return
+        self.send_response(200)
+        self.send_header("Content-Type", ctype)
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self._cors()
+        self.end_headers()
+        self.wfile.write(body)
+
     # ---- HTTP verbs ----
     def do_OPTIONS(self):
         self.send_response(204)
@@ -100,6 +129,10 @@ class Handler(BaseHTTPRequestHandler):
             return
         if path in ("/", "/index.html"):
             self._serve_index()
+            return
+        f = self._local_file(path)
+        if f:
+            self._serve_file(f)
             return
         self._proxy()
 

@@ -6,7 +6,8 @@ Everything lives in [`index.html`](index.html) (HTML + CSS + vanilla JS, no depe
 
 ## Features
 
-- **Visual layout canvas** — drag/resize bounding boxes on a 1000×1000 grid (origin top-left). Each box is an element with a type, description, and color palette.
+- **Tiled, draggable workspace** — the main area is a GridStack grid of resizable/draggable windows (Prompt builder, Layout canvas, JSON output, Rendered output). Drag a window by its title bar, resize from the edges; the arrangement is saved per browser. **⊞ Layout** in the header resets it. GridStack is bundled locally (no CDN), served by the proxy.
+- **Visual layout canvas** — drag/resize bounding boxes on a 1000×1000 grid (origin top-left). Each box is an element with a type, description, and color palette. The canvas reshapes to the selected aspect ratio.
 - **Structured prompt builder** — high-level description, style block (aesthetics, lighting, photo, medium, palette), background, and a reorderable list of elements.
 - **Live JSON output** — syntax-highlighted, copy or download with one click.
 - **Generate from text** — describe the image in plain language and an OpenAI-compatible LLM (OpenRouter or a local `llama.cpp` server) fills in the whole schema. Settings are stored in `localStorage`.
@@ -151,9 +152,10 @@ The **Test connection** button in the ComfyUI panel pings `/system_stats` and re
 | File | Purpose |
 |------|---------|
 | [`index.html`](index.html) | The entire app — editor, canvas, LLM generation, ComfyUI mode. |
-| [`comfy_proxy.py`](comfy_proxy.py) | Stdlib proxy: serves the page + forwards HTTP and the WebSocket to ComfyUI (same-origin, no CORS flags). |
+| [`comfy_proxy.py`](comfy_proxy.py) | Stdlib proxy: serves the page + local asset files (e.g. `vendor/`) and forwards HTTP and the WebSocket to ComfyUI (same-origin, no CORS flags). |
 | [`comfy_proxy.sh`](comfy_proxy.sh) | start/stop/status/restart/logs helper, plus `install-service`/`uninstall-service` to run it as a background systemd service. |
 | [`workflow.json`](workflow.json) | The Ideogram 4 ComfyUI workflow (API format) the render mode is built around; also embedded in `index.html`. |
+| [`vendor/`](vendor/) | Bundled third-party assets (GridStack JS/CSS) served locally by the proxy, so the tiled layout works without a CDN. |
 
 ## Notes
 
