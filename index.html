@@ -406,7 +406,12 @@
             <input type="number" id="cf-megapixels" min="0.1" step="0.1">
           </div>
         </div>
-        <label>Quality preset</label>
+        <label>Scheduler workflow</label>
+        <select id="cf-workflow">
+          <option value="v1">Ideogram 4 default (Ideogram4Scheduler)</option>
+          <option value="v2">Simple scheduler (BasicScheduler + AuraFlow shift, euler)</option>
+        </select>
+        <label>Quality preset <span style="color:var(--faint)">(sets step count)</span></label>
         <select id="cf-preset">
           <option value="Quality">Quality (48 steps)</option>
           <option value="Default">Default (20 steps)</option>
@@ -1369,12 +1374,26 @@ const WORKFLOW_TEMPLATE = {
 const NODE = { resolution: "37", seed: "98:18", preset: "98:156", guider: "98:155", cfgOverride: "98:157", sampler: "98:16", prompt: "98:24", clip: "98:14", diffModel: "98:23", uncondModel: "98:154", vae: "98:9", latent: "98:11" };
 const PRESET_INDEX = { Quality: 0, Default: 1, Turbo: 2 };
 
+// Alternative scheduler setup (from the community "simple scheduler" tweak):
+// insert ModelSamplingAuraFlow (shift) after the diffusion model, replace the
+// Ideogram4Scheduler with a BasicScheduler ("simple"), and use euler. Derived
+// from the default template so they stay in sync.
+function makeWorkflowV2(v1) {
+  const wf = JSON.parse(JSON.stringify(v1));
+  wf["98:200"] = { inputs: { shift: 5, model: ["98:23", 0] }, class_type: "ModelSamplingAuraFlow", _meta: { title: "ModelSamplingAuraFlow" } };
+  wf["98:157"].inputs.model = ["98:200", 0];                 // CFGOverride <- shifted model
+  wf["98:17"] = { inputs: { model: ["98:200", 0], scheduler: "simple", steps: ["98:151", 1], denoise: 1 }, class_type: "BasicScheduler", _meta: { title: "BasicScheduler" } };
+  wf["98:16"].inputs.sampler_name = "euler";
+  return wf;
+}
+const WORKFLOW_TEMPLATE_V2 = makeWorkflowV2(WORKFLOW_TEMPLATE);
+
 const COMFY_KEY = "ideogram_comfy_cfg";
 function defaultComfyCfg() {
   return {
     mode: "manual",
     url: "http://192.168.2.33:8188",
-    direct: false, save: false,
+    direct: false, save: false, workflow: "v1",
     aspect_ratio: "1:1 (Square)", megapixels: 2,
     preset: "Turbo", seed: 453251084258580, randomize: true,
     cfg: 7, sampler_name: "res_multistep",
@@ -1521,6 +1540,7 @@ function applyComfyForm() {
   $("cf-aspect").value = comfyCfg.aspect_ratio;
   if ($("cf-aspect").selectedIndex < 0) { comfyCfg.aspect_ratio = "1:1 (Square)"; $("cf-aspect").value = comfyCfg.aspect_ratio; saveComfyCfg(); }
   $("cf-megapixels").value = comfyCfg.megapixels;
+  $("cf-workflow").value = comfyCfg.workflow;
   $("cf-preset").value = comfyCfg.preset;
   $("cf-seed").value = comfyCfg.seed;
   $("cf-randomize").checked = comfyCfg.randomize;
@@ -1543,6 +1563,7 @@ function readComfyForm() {
   comfyCfg.url = $("cf-url").value.trim();
   comfyCfg.aspect_ratio = $("cf-aspect").value.trim();
   comfyCfg.megapixels = parseFloat($("cf-megapixels").value);
+  comfyCfg.workflow = $("cf-workflow").value;
   comfyCfg.preset = $("cf-preset").value;
   comfyCfg.seed = clampSeed($("cf-seed").value);
   comfyCfg.randomize = $("cf-randomize").checked;
@@ -1569,7 +1590,8 @@ function readComfyForm() {
 }
 
 function buildWorkflow() {
-  const wf = (typeof structuredClone === "function") ? structuredClone(WORKFLOW_TEMPLATE) : JSON.parse(JSON.stringify(WORKFLOW_TEMPLATE));
+  const base = comfyCfg.workflow === "v2" ? WORKFLOW_TEMPLATE_V2 : WORKFLOW_TEMPLATE;
+  const wf = (typeof structuredClone === "function") ? structuredClone(base) : JSON.parse(JSON.stringify(base));
   wf[NODE.prompt].inputs.text = JSON.stringify(buildJSON(), null, 2);
   wf[NODE.resolution].inputs.aspect_ratio = comfyCfg.aspect_ratio;
   wf[NODE.resolution].inputs.megapixels = comfyCfg.megapixels;
@@ -1913,6 +1935,14 @@ function updateComfyTarget() {
 $("cf-test").addEventListener("click", comfyTest);
 $("cf-url").addEventListener("input", updateComfyTarget);
 $("cf-direct").addEventListener("change", () => { readComfyForm(); syncConnFields(); updateComfyTarget(); });
+// switching scheduler workflow pairs it with its recommended sampler
+$("cf-workflow").addEventListener("change", () => {
+  comfyCfg.workflow = $("cf-workflow").value;
+  comfyCfg.sampler_name = comfyCfg.workflow === "v2" ? "euler" : "res_multistep";
+  $("cf-sampler").value = comfyCfg.sampler_name;
+  saveComfyCfg();
+  toast("Scheduler: " + (comfyCfg.workflow === "v2" ? "Simple (euler)" : "Ideogram 4 default"), "ok");
+});
 $("cf-aspect").addEventListener("change", applyCanvasAspect);
 window.addEventListener("resize", applyCanvasAspect);
 $("layoutPreset").addEventListener("change", e => applyPreset(e.target.value));
