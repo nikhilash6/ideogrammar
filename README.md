@@ -45,14 +45,26 @@ A toggle in the header switches between:
 
 Coordinates are a 1000×1000 space, origin top-left, `bbox = [x1, y1, x2, y2]`.
 
+## Settings (⚙)
+
+The **⚙ Settings** button (header) opens one dialog for everything not tied to a specific render:
+
+- **Text-generation model (LLM)** — provider (OpenRouter / local llama.cpp), base URL, API key, model. **Save named presets** of these so switching endpoints doesn't lose the model name — pick a preset from the dropdown to restore it.
+- **Vectorizer** — mask method (SAM / heuristic / none) and flatness threshold.
+- **Setups & library** — save/load/delete named **setups** (the full prompt builder state + render parameters).
+
 ## Generate from text (LLM)
 
-Click **✨ Generate from text**, open **Model provider settings**, and configure an OpenAI-compatible endpoint:
+Configure a provider in **⚙ Settings** (OpenAI-compatible):
 
 - **OpenRouter** — base URL `https://openrouter.ai/api/v1`, your API key, a model like `anthropic/claude-3.5-sonnet`.
 - **Local llama.cpp** — run `llama-server` with CORS enabled; base URL `http://<host>:8081/v1`.
 
-The model returns the full schema, which you can then edit visually. Settings are saved in your browser only.
+Then click **✨ Generate from text**, describe the image, and the model returns the full schema, which you can edit visually. Settings/presets are saved in your browser only.
+
+## Setups & library
+
+A **setup** is the whole prompt builder state (description, style, background, positioned elements with per-element vectorize modes) plus the render parameters. Save the current one from **⚙ Settings → Setups & library**, and reload it anytime. Every render also captures its setup: open it in the viewer and press **⤵ Load setup** to restore exactly the prompt + settings that produced it. Stored in `localStorage`.
 
 ## ComfyUI mode
 
