@@ -103,7 +103,6 @@
 
   /* ---------- inputs ---------- */
   label { display: block; font-size: 11px; color: var(--muted); margin: 10px 0 4px; font-weight: 500; }
-  label:first-child { margin-top: 2px; }
   input[type="text"], input[type="number"], textarea, select {
     width: 100%; background: var(--bg); color: var(--text);
     border: 1px solid var(--border); border-radius: var(--r-sm);
@@ -537,7 +536,7 @@
         <img id="renderImg" alt="rendered result" title="Click to enlarge">
       </div>
       <div class="progress"><div id="renderBar"></div></div>
-      <div class="render-row"><span class="status" id="renderStatus"></span></div>
+      <div class="render-row" style="display:flex; align-items:center; gap:8px;"><span class="status" id="renderStatus" style="flex:1;"></span><button id="renderCancel" title="Stop the current render on ComfyUI" style="display:none; padding:6px 12px;">✕ Cancel</button></div>
       <div class="render-row"><button id="vectorizeBtn" title="Trace flat regions (text/logos/flat art) to vector, keep photographic parts as raster">⬡ Vectorize → SVG</button><button id="vecSettingsBtn" title="Vectorizer settings" style="padding:7px 10px;">⚙</button><span class="status" id="vectorizeStatus" style="flex:1;"></span></div>
       <div id="galleryRow" style="display:none; flex-direction:column; align-items:stretch; gap:6px; width:100%;">
         <div class="col-title" style="margin:6px 0 0; display:flex; align-items:center; gap:8px;">History <span id="galleryCount" class="count"></span><span style="flex:1"></span><button id="galleryClear" title="Clear gallery list (does not delete files)" style="padding:2px 9px; font-size:11px; text-transform:none; letter-spacing:0;">Clear</button></div>
@@ -1839,9 +1838,29 @@ function buildWorkflow() {
 let rendering = false;
 let lastRenderSetup = null;
 let renderWS = null;
+let renderPromptId = null;   // id of the prompt currently on ComfyUI
+let renderStop = null;       // set by trackRender; halts ws/polling without finishing
 function setRenderStatus(html, cls) { const s = $("renderStatus"); s.innerHTML = html; s.className = "status" + (cls ? " " + cls : ""); }
 function setBar(frac) { $("renderBar").style.width = Math.max(0, Math.min(1, frac)) * 100 + "%"; }
-function finishRender() { rendering = false; $("renderBtn").disabled = $("renderBtn2").disabled = false; if (renderWS) { try { renderWS.close(); } catch (_) {} renderWS = null; } }
+function showCancel(on) { const b = $("renderCancel"); if (b) b.style.display = on ? "inline-block" : "none"; }
+function finishRender() { rendering = false; renderStop = null; renderPromptId = null; showCancel(false); $("renderCancel").disabled = false; $("renderBtn").disabled = $("renderBtn2").disabled = false; if (renderWS) { try { renderWS.close(); } catch (_) {} renderWS = null; } }
+
+async function cancelRender() {
+  if (!rendering) return;
+  const base = comfyBase();
+  if (renderStop) renderStop();          // stop ws/poll first so no late "Done ✓"
+  $("renderCancel").disabled = true;
+  setRenderStatus('<span class="spinner"></span>Cancelling…', "");
+  if (base) {
+    const body = JSON.stringify({ client_id: getClientId() });
+    // Interrupt the running prompt, and drop it from the queue if still pending.
+    await fetch(base + "/interrupt", { method: "POST", headers: { "Content-Type": "application/json" }, body }).catch(() => {});
+    if (renderPromptId) await fetch(base + "/queue", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ delete: [renderPromptId] }) }).catch(() => {});
+  }
+  setBar(0);
+  setRenderStatus("Render cancelled.", "err");
+  finishRender();
+}
 
 async function comfyRender() {
   if (rendering) return;
@@ -1853,6 +1872,7 @@ async function comfyRender() {
 
   rendering = true;
   $("renderBtn").disabled = $("renderBtn2").disabled = true;
+  showCancel(true);
   setBar(0);
   setRenderStatus('<span class="spinner"></span>Queuing…', "");
 
@@ -1874,6 +1894,7 @@ async function comfyRender() {
     const j = await res.json();
     promptId = j.prompt_id;
     if (!promptId) throw new Error("No prompt_id returned by ComfyUI.");
+    renderPromptId = promptId;
   } catch (err) {
     let msg = err.message || String(err);
     if (err instanceof TypeError) msg = "Network/CORS error reaching " + base + ". Check the URL, that ComfyUI is running, and start it with --enable-cors-header.";
@@ -1893,6 +1914,8 @@ function trackRender(base, promptId) {
     finishRender();
   };
   const fail = (msg) => { if (done) return; done = true; setRenderStatus(msg, "err"); finishRender(); };
+  // Let cancelRender() halt tracking without triggering complete()/fail().
+  renderStop = () => { done = true; if (renderWS) { try { renderWS.close(); } catch (_) {} renderWS = null; } };
 
   // Live progress via websocket (best-effort).
   try {
@@ -2332,6 +2355,7 @@ document.querySelectorAll("#modeSeg button").forEach(btn => {
 });
 $("renderBtn").addEventListener("click", comfyRender);
 $("renderBtn2").addEventListener("click", comfyRender);
+$("renderCancel").addEventListener("click", cancelRender);
 $("cf-rerollSeed").addEventListener("click", () => { comfyCfg.seed = randomSeed(); $("cf-seed").value = comfyCfg.seed; saveComfyCfg(); });
 ["cf-url", "cf-save", "cf-aspect", "cf-megapixels", "cf-preset", "cf-seed", "cf-randomize", "cf-cfg", "cf-sampler", "cf-cfgo", "cf-start", "cf-end", "cf-diff", "cf-uncond", "cf-vae", "cf-clip", "cf-cliptype", "cf-batch"].forEach(id => {
   const e = $(id); if (e) e.addEventListener("change", readComfyForm);
