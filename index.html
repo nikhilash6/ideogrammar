@@ -1394,10 +1394,11 @@ function defaultComfyCfg() {
   return {
     mode: "manual",
     url: "http://192.168.2.33:8188",
-    direct: false, save: false, workflow: "v1",
+    _defaultsV: 2,
+    direct: false, save: false, workflow: "v2",
     aspect_ratio: "1:1 (Square)", megapixels: 2,
     preset: "Turbo", seed: 453251084258580, randomize: true,
-    cfg: 7, sampler_name: "res_multistep",
+    cfg: 3, sampler_name: "euler",
     cfg_override: 3, start_percent: 0.9, end_percent: 1,
     diff_model: "ideogram4_fp8_scaled.safetensors",
     uncond_model: "ideogram4_unconditional_fp8_scaled.safetensors",
@@ -1407,7 +1408,13 @@ function defaultComfyCfg() {
   };
 }
 let comfyCfg = loadComfyCfg();
-function loadComfyCfg() { let c; try { c = JSON.parse(localStorage.getItem(COMFY_KEY)); } catch (_) {} return Object.assign(defaultComfyCfg(), c && typeof c === "object" ? c : {}); }
+function loadComfyCfg() {
+  let c; try { c = JSON.parse(localStorage.getItem(COMFY_KEY)); } catch (_) {}
+  const cfg = Object.assign(defaultComfyCfg(), c && typeof c === "object" ? c : {});
+  // one-time migration to the recommended simple-scheduler defaults
+  if (cfg._defaultsV !== 2) { cfg.workflow = "v2"; cfg.cfg = 3; cfg.sampler_name = "euler"; cfg._defaultsV = 2; }
+  return cfg;
+}
 function saveComfyCfg() { localStorage.setItem(COMFY_KEY, JSON.stringify(comfyCfg)); }
 function comfyBase() {
   // Default: talk to whatever origin served this page (the proxy) -> no CORS.
