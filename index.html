@@ -1073,7 +1073,9 @@ function selectElement(id) { selectedId = id; renderCanvas(); renderElements(); 
 /* ------------------------------------------------------------------ */
 /*  JSON                                                              */
 /* ------------------------------------------------------------------ */
-function buildJSON() {
+// Normalized 0..1000 layout — the editor's native space and the shape the LLM
+// produces (see SYSTEM_PROMPT). Used for generation/refine round-trips.
+function buildLayoutJSON() {
   return {
     high_level_description: state.high_level_description,
     style_description: {
@@ -1093,6 +1095,25 @@ function buildJSON() {
       }))
     }
   };
+}
+
+function scaleBoxToPixels(b, w, h) {
+  return [Math.round(b[0] / COORD * w), Math.round(b[1] / COORD * h),
+          Math.round(b[2] / COORD * w), Math.round(b[3] / COORD * h)];
+}
+
+// Display / diffusion-facing prompt: bboxes are expressed in the SAME pixel
+// coordinate frame as the stated canvas, so the two no longer disagree. A
+// mismatched range (boxes 0..1000 vs canvas 1456+) made the model squash and
+// shuffle the layout. canvas comes first so the model reads the frame up front.
+function buildJSON() {
+  const info = aspectInfo();
+  const d = computeDims();
+  const layout = buildLayoutJSON();
+  layout.compositional_deconstruction.elements = layout.compositional_deconstruction.elements.map(el => ({
+    ...el, bbox: scaleBoxToPixels(el.bbox, d.width, d.height)
+  }));
+  return { canvas: { width: d.width, height: d.height, aspect_ratio: info.ratio, orientation: info.orientation }, ...layout };
 }
 
 let jsonThrottle = null;
@@ -1173,9 +1194,20 @@ function doImport(file) {
   reader.readAsText(file);
 }
 
+function scaleBoxFromPixels(b, w, h) {
+  return [clamp(Math.round((+b[0] || 0) / w * COORD), 0, COORD), clamp(Math.round((+b[1] || 0) / h * COORD), 0, COORD),
+          clamp(Math.round((+b[2] || 0) / w * COORD), 0, COORD), clamp(Math.round((+b[3] || 0) / h * COORD), 0, COORD)];
+}
+
 function loadFromJSON(data) {
   const sd = data.style_description || {};
   const cd = data.compositional_deconstruction || {};
+  // If the JSON carries a pixel-space canvas (our download/diffusion shape),
+  // map bboxes back into the editor's 0..1000 space. LLM/external JSON has no
+  // canvas, so srcW/srcH default to COORD and this is a no-op.
+  const cv = data.canvas || {};
+  const srcW = (+cv.width > 0) ? +cv.width : COORD;
+  const srcH = (+cv.height > 0) ? +cv.height : COORD;
   state = {
     high_level_description: data.high_level_description || "",
     style_description: {
@@ -1186,7 +1218,7 @@ function loadFromJSON(data) {
     background: cd.background || "",
     elements: Array.isArray(cd.elements) ? cd.elements.map(e => emptyElement({
       type: e.type || "obj",
-      bbox: Array.isArray(e.bbox) && e.bbox.length === 4 ? e.bbox.map(n => clamp(Math.round(+n || 0), 0, COORD)) : [100, 100, 500, 500],
+      bbox: Array.isArray(e.bbox) && e.bbox.length === 4 ? scaleBoxFromPixels(e.bbox, srcW, srcH) : [100, 100, 500, 500],
       desc: e.desc || "",
       color_palette: Array.isArray(e.color_palette) ? e.color_palette.map(normalizeUpper) : []
     })) : []
@@ -1370,7 +1402,7 @@ async function runRefine() {
   if (cfg.apiKey) headers["Authorization"] = "Bearer " + cfg.apiKey;
   if (cfg.provider === "openrouter") { headers["HTTP-Referer"] = location.origin; headers["X-Title"] = "Ideogrammar"; }
 
-  const current = buildJSON();
+  const current = buildLayoutJSON(); // normalized 0..1000 space, matches SYSTEM_PROMPT
   const userMsg = "Current setup:\n" + JSON.stringify(current, null, 2) + "\n\nChange request:\n" + instruction;
   const body = {
     model: cfg.model,
@@ -1745,20 +1777,36 @@ function aspectInfo(label) {
   return { label, ar, ratio, orientation };
 }
 
-// The diffusion model's only prompt is the JSON text. The latent is sized to the
-// chosen aspect ratio, but without an explicit orientation cue the model guesses
-// orientation per-seed (~50% come out rotated). Inject a strong cue.
+// Replicate the workflow's resolution math so the prompt can state the exact
+// output dimensions. ResolutionSelector: area = megapixels * 1024^2, sides
+// ~ sqrt(area * ar) rounded to a multiple of 8; EmptyFlux2Latent then rounds up
+// to 16 with a 256 floor. Verified: 3:2 @ 2MP -> 1776x1184.
+function computeDims() {
+  const ar = aspectInfo().ar;
+  const area = (comfyCfg.megapixels || 2) * 1024 * 1024;
+  const rs8 = x => Math.round(x / 8) * 8;
+  const lat = x => Math.max(256, Math.floor((x + 15) / 16) * 16);
+  return { width: lat(rs8(Math.sqrt(area * ar))), height: lat(rs8(Math.sqrt(area / ar))) };
+}
+
+// The diffusion model's only prompt is this text (CLIPTextEncode, node 98:24 —
+// it is NOT parsed as JSON anywhere). The latent is sized to the chosen aspect
+// ratio, but without an explicit orientation cue the model guesses orientation
+// per-seed and frequently rotates the content 90deg. Lead with a strong, plain
+// orientation + exact-dimension statement, and repeat it inside the JSON.
 function buildPromptText() {
-  const obj = buildJSON();
+  const obj = buildJSON();           // already carries the canvas field
   const info = aspectInfo();
-  obj.canvas = { aspect_ratio: info.ratio, orientation: info.orientation };
-  const lead = info.orientation === "landscape"
-      ? `Wide ${info.ratio} landscape composition (horizontal, wider than tall). `
-    : info.orientation === "portrait"
-      ? `Tall ${info.ratio} portrait composition (vertical, taller than wide). `
-      : "";
-  if (lead) obj.high_level_description = lead + (obj.high_level_description || "");
-  return JSON.stringify(obj, null, 2);
+  const d = obj.canvas;
+  let lead;
+  const coord = ` Element bboxes are [x1,y1,x2,y2] in pixels within this ${d.width}x${d.height} frame, origin top-left, x right, y down; place each element exactly there, do not rotate or mirror the layout.`;
+  if (info.orientation === "landscape")
+    lead = `LANDSCAPE orientation: a wide horizontal ${info.ratio} image, ${d.width}x${d.height} pixels (wider than tall).` + coord;
+  else if (info.orientation === "portrait")
+    lead = `PORTRAIT orientation: a tall vertical ${info.ratio} image, ${d.width}x${d.height} pixels (taller than wide).` + coord;
+  else
+    lead = `SQUARE ${info.ratio} image, ${d.width}x${d.height} pixels.` + coord;
+  return lead + "\n\n" + JSON.stringify(obj, null, 2);
 }
 
 function buildWorkflow() {
