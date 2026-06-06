@@ -11,6 +11,7 @@ Everything lives in [`index.html`](index.html) (HTML + CSS + vanilla JS, no depe
 - **Structured prompt builder** — high-level description, style block (aesthetics, lighting, photo, medium, palette), background, and a reorderable list of elements.
 - **Live JSON output** — syntax-highlighted, copy or download with one click.
 - **Generate from text** — describe the image in plain language and an OpenAI-compatible LLM (OpenRouter or a local `llama.cpp` server) fills in the whole schema. Settings are stored in `localStorage`.
+- **Refine** — ask the LLM to adjust the current setup with a plain-language change (e.g. "make it a lighter composition"); it rewrites the whole setup while keeping everything the request doesn't touch.
 - **ComfyUI mode** — render the current prompt on your ComfyUI server using the bundled Ideogram 4 workflow, with every workflow parameter exposed and the result (plus live progress) shown in the editor. Renders collect in a gallery with a full-size viewer, and can be saved permanently.
 - **Import / Reset / Download** — round-trip the prompt JSON.
 
@@ -61,6 +62,10 @@ Configure a provider in **⚙ Settings** (OpenAI-compatible):
 - **Local llama.cpp** — run `llama-server` with CORS enabled; base URL `http://<host>:8081/v1`.
 
 Then click **✨ Generate from text**, describe the image, and the model returns the full schema, which you can edit visually. Settings/presets are saved in your browser only.
+
+## Refine (LLM)
+
+Click **🪄 Refine** to adjust the *current* setup with a natural-language change instead of starting over. Describe a change (e.g. "make it a lighter composition", "move the title to the bottom", "swap the palette to autumn tones") and the model rewrites the **entire** setup — style, background and every positioned element — to reflect it while preserving everything the request doesn't touch. Per-element vectorize modes are carried over by position. Quick-suggestion chips are provided. You can also refine straight from a render: open it in the viewer and press **🪄 Refine** to load that render's setup and adjust it.
 
 ## Setups & library
 

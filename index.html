@@ -237,6 +237,8 @@
   .status { font-size: 12px; color: var(--muted); flex: 1; line-height: 1.4; }
   .status.err { color: var(--danger); }
   .status.ok { color: var(--success); }
+  .chip { padding: 5px 10px; font-size: 11px; border: 1px solid var(--border-strong); background: var(--bg); color: var(--muted); border-radius: var(--r); }
+  .chip:hover { color: var(--text); border-color: var(--accent); }
   .seg { display: inline-flex; border: 1px solid var(--border-strong); border-radius: var(--r); overflow: hidden; }
   .seg button { border: none; border-radius: 0; padding: 7px 16px; background: var(--bg); font-weight: 500; }
   .seg button:hover { transform: none; }
@@ -251,7 +253,7 @@
   body.comfy-mode #renderBtn { display: inline-block; }
   .render-panel { flex-direction: column; align-items: stretch; gap: 10px; width: 100%; flex: 1; min-height: 0; }
   .tile-body.output-body { display: flex; flex-direction: column; }
-  .render-img-wrap { position: relative; width: 100%; flex: 1; min-height: 120px; background: var(--panel); border: 1px solid var(--border); border-radius: var(--r); overflow: hidden; display: grid; place-items: center; box-shadow: var(--shadow), 0 0 0 1px var(--border); }
+  .render-img-wrap { position: relative; width: 100%; flex: 1; min-height: 120px; background: var(--panel); border: 1px solid var(--border); border-radius: var(--r); overflow: hidden; display: flex; align-items: center; justify-content: center; box-shadow: var(--shadow), 0 0 0 1px var(--border); }
   .render-img-wrap img { max-width: 100%; max-height: 100%; width: auto; height: auto; object-fit: contain; display: none; }
   .render-placeholder { color: var(--faint); font-size: 12px; text-align: center; padding: 24px; line-height: 1.6; }
   .progress { width: 100%; height: 6px; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
@@ -313,6 +315,7 @@
   <div class="btn-row">
     <button class="primary comfy-only" id="renderBtn">🎨 Render</button>
     <button class="primary" id="generateBtn">✨ Generate from text</button>
+    <button id="refineBtn" title="Ask the model to adjust the current setup">🪄 Refine</button>
     <button id="importBtn">Import</button>
     <button id="resetBtn">Reset</button>
     <button id="copyBtn">Copy JSON</button>
@@ -582,6 +585,35 @@
   </div>
 </div>
 
+<!-- REFINE MODAL -->
+<div class="overlay" id="refineOverlay">
+  <div class="modal">
+    <div class="modal-head">
+      <h2>🪄 Refine the current setup</h2>
+      <button class="close" id="refineClose">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="hint" style="margin-bottom:10px;">Describe a change and the model rewrites the <b>entire current setup</b> (style, background, every positioned element) to reflect it — keeping everything else intact. Uses the model in <b>⚙ Settings</b>.</div>
+      <label>What should change?</label>
+      <textarea id="refinePrompt" rows="3" placeholder="e.g. Make it a lighter, airier composition · Move the title to the bottom · Swap the palette to autumn tones · Add a small bird in the top-right"></textarea>
+      <div class="chips" id="refineChips" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;">
+        <button type="button" class="chip" data-refine="Make it a lighter, airier composition with more negative space.">Lighter composition</button>
+        <button type="button" class="chip" data-refine="Make it darker and more dramatic with moodier lighting.">Darker &amp; moodier</button>
+        <button type="button" class="chip" data-refine="Simplify the scene — fewer elements, cleaner layout.">Simplify</button>
+        <button type="button" class="chip" data-refine="Make the color palette warmer.">Warmer palette</button>
+        <button type="button" class="chip" data-refine="Make the color palette cooler.">Cooler palette</button>
+        <button type="button" class="chip" data-refine="Make the main subject larger and more central.">Bigger subject</button>
+      </div>
+      <div class="hint" style="margin-top:8px;">Press ⌘/Ctrl + Enter to apply. You can edit everything afterwards.</div>
+    </div>
+    <div class="modal-foot">
+      <span class="status" id="refineStatus"></span>
+      <button id="refineCancel">Cancel</button>
+      <button class="primary" id="refineRun">Refine</button>
+    </div>
+  </div>
+</div>
+
 <!-- SETTINGS MODAL -->
 <div class="overlay" id="settingsOverlay">
   <div class="modal" style="max-width:560px;">
@@ -664,6 +696,7 @@
       <button id="imgRotL" title="Rotate 90° counter-clockwise">⟲</button>
       <button id="imgRotR" title="Rotate 90° clockwise">⟳</button>
       <button id="imgLoadSetup" title="Restore the prompt + settings that produced this render">⤵ Load setup</button>
+      <button id="imgRefine" title="Load this render's setup and ask the model to adjust it">🪄 Refine</button>
       <button id="imgVectorize">⬡ Vectorize</button>
       <a id="imgDownload" download>⤓ Download</a>
       <button id="imgClose">Close</button>
@@ -1243,6 +1276,10 @@ Rules:
 - All colors are uppercase 6-digit hex like "#1A2B3C". Give each element a small palette (1-4 colors) that matches it.
 - Be concrete and specific. Return valid JSON only.`;
 
+const REFINE_SYSTEM_PROMPT = SYSTEM_PROMPT + `
+
+REFINEMENT MODE: You are given an EXISTING setup as JSON and a change request. Return the COMPLETE updated setup in the exact same shape — not a diff, not only the changed fields. Apply the requested change faithfully and adjust whatever else is needed for it to make sense (e.g. "lighter composition" may touch lighting, palette, background, element sizes and positions). Preserve everything the request does not affect: keep unrelated descriptions, the element set, types and bboxes the same unless the change implies otherwise. Keep the same kinds/number of elements unless the request asks to add or remove some.`;
+
 let generating = false;
 
 async function runGeneration() {
@@ -1311,6 +1348,68 @@ function setGenStatus(html, cls) { const s = $("genStatus"); s.innerHTML = html;
 function openGenModal() { applyCfgToForm(); setGenStatus("", ""); $("genOverlay").classList.add("show"); $("genPrompt").focus(); }
 function closeGenModal() { $("genOverlay").classList.remove("show"); }
 
+let refining = false;
+function setRefineStatus(html, cls) { const s = $("refineStatus"); s.innerHTML = html; s.className = "status" + (cls ? " " + cls : ""); }
+function openRefineModal() { setRefineStatus("", ""); $("refineOverlay").classList.add("show"); $("refinePrompt").focus(); }
+function closeRefineModal() { $("refineOverlay").classList.remove("show"); }
+
+async function runRefine() {
+  if (refining) return;
+  const cfg = loadCfg();
+  const instruction = $("refinePrompt").value.trim();
+  if (!instruction) { setRefineStatus("Describe the change first.", "err"); return; }
+  if (!cfg.baseUrl) { setRefineStatus("Set a Base URL in ⚙ Settings.", "err"); openSettings(); return; }
+  if (!cfg.model) { setRefineStatus("Set a Model name in ⚙ Settings.", "err"); openSettings(); return; }
+  if (cfg.provider === "openrouter" && !cfg.apiKey) { setRefineStatus("OpenRouter needs an API key (⚙ Settings).", "err"); openSettings(); return; }
+
+  refining = true;
+  $("refineRun").disabled = true;
+  setRefineStatus('<span class="spinner"></span>Refining…', "");
+
+  const headers = { "Content-Type": "application/json" };
+  if (cfg.apiKey) headers["Authorization"] = "Bearer " + cfg.apiKey;
+  if (cfg.provider === "openrouter") { headers["HTTP-Referer"] = location.origin; headers["X-Title"] = "Ideogrammar"; }
+
+  const current = buildJSON();
+  const userMsg = "Current setup:\n" + JSON.stringify(current, null, 2) + "\n\nChange request:\n" + instruction;
+  const body = {
+    model: cfg.model,
+    messages: [{ role: "system", content: REFINE_SYSTEM_PROMPT }, { role: "user", content: userMsg }],
+    temperature: 0.5,
+    response_format: { type: "json_object" }
+  };
+
+  try {
+    const res = await fetch(cfg.baseUrl + "/chat/completions", { method: "POST", headers, body: JSON.stringify(body) });
+    if (!res.ok) {
+      let detail = "";
+      try { const j = await res.json(); detail = j.error?.message || JSON.stringify(j.error || j); }
+      catch (_) { detail = await res.text().catch(() => ""); }
+      throw new Error(`HTTP ${res.status} ${res.statusText}${detail ? " — " + detail : ""}`);
+    }
+    const data = await res.json();
+    const content = data.choices?.[0]?.message?.content;
+    if (!content) throw new Error("Empty response from model.");
+    const parsed = extractJSON(content);
+    if (!parsed) throw new Error("Could not parse JSON from the model's reply.");
+    const prevVec = state.elements.map(e => e.vectorize || "auto");
+    loadFromJSON(parsed);
+    // best-effort: carry over per-element vectorize modes by position
+    state.elements.forEach((e, i) => { if (prevVec[i]) e.vectorize = prevVec[i]; });
+    render();
+    setRefineStatus("Refined ✓", "ok");
+    toast("Setup refined ✓", "ok");
+    setTimeout(closeRefineModal, 600);
+  } catch (err) {
+    let msg = err.message || String(err);
+    if (err instanceof TypeError) msg = "Network/CORS error reaching " + cfg.baseUrl + ". Check the URL, that the server is running, and that CORS is allowed.";
+    setRefineStatus(msg, "err");
+  } finally {
+    refining = false;
+    $("refineRun").disabled = false;
+  }
+}
+
 /* ------------------------------------------------------------------ */
 /*  Wire up events                                                    */
 /* ------------------------------------------------------------------ */
@@ -1350,6 +1449,18 @@ $("genOverlay").addEventListener("mousedown", e => { overlayPressedSelf = (e.tar
 $("genOverlay").addEventListener("click", e => { if (e.target === $("genOverlay") && overlayPressedSelf) closeGenModal(); });
 $("genPrompt").addEventListener("keydown", e => { if ((e.metaKey || e.ctrlKey) && e.key === "Enter") runGeneration(); });
 document.addEventListener("keydown", e => { if (e.key === "Escape" && $("genOverlay").classList.contains("show")) closeGenModal(); });
+
+// refine modal
+$("refineBtn").addEventListener("click", openRefineModal);
+$("refineClose").addEventListener("click", closeRefineModal);
+$("refineCancel").addEventListener("click", closeRefineModal);
+$("refineRun").addEventListener("click", runRefine);
+let refinePressedSelf = false;
+$("refineOverlay").addEventListener("mousedown", e => { refinePressedSelf = (e.target === $("refineOverlay")); });
+$("refineOverlay").addEventListener("click", e => { if (e.target === $("refineOverlay") && refinePressedSelf) closeRefineModal(); });
+$("refinePrompt").addEventListener("keydown", e => { if ((e.metaKey || e.ctrlKey) && e.key === "Enter") runRefine(); });
+$("refineChips").addEventListener("click", e => { const b = e.target.closest("[data-refine]"); if (!b) return; const t = $("refinePrompt"); t.value = (t.value.trim() ? t.value.trim() + " " : "") + b.dataset.refine; t.focus(); });
+document.addEventListener("keydown", e => { if (e.key === "Escape" && $("refineOverlay").classList.contains("show")) closeRefineModal(); });
 document.querySelectorAll("#providerSeg button").forEach(btn => {
   btn.addEventListener("click", () => {
     document.querySelectorAll("#providerSeg button").forEach(b => b.classList.remove("active"));
@@ -1625,10 +1736,35 @@ function readComfyForm() {
   saveComfyCfg();
 }
 
+function aspectInfo(label) {
+  label = label || comfyCfg.aspect_ratio || "1:1 (Square)";
+  const ar = parseAspectRatio(label);
+  const m = String(label).match(/\d+(?:\.\d+)?\s*:\s*\d+(?:\.\d+)?/);
+  const ratio = m ? m[0].replace(/\s+/g, "") : "1:1";
+  const orientation = ar > 1.02 ? "landscape" : ar < 0.98 ? "portrait" : "square";
+  return { label, ar, ratio, orientation };
+}
+
+// The diffusion model's only prompt is the JSON text. The latent is sized to the
+// chosen aspect ratio, but without an explicit orientation cue the model guesses
+// orientation per-seed (~50% come out rotated). Inject a strong cue.
+function buildPromptText() {
+  const obj = buildJSON();
+  const info = aspectInfo();
+  obj.canvas = { aspect_ratio: info.ratio, orientation: info.orientation };
+  const lead = info.orientation === "landscape"
+      ? `Wide ${info.ratio} landscape composition (horizontal, wider than tall). `
+    : info.orientation === "portrait"
+      ? `Tall ${info.ratio} portrait composition (vertical, taller than wide). `
+      : "";
+  if (lead) obj.high_level_description = lead + (obj.high_level_description || "");
+  return JSON.stringify(obj, null, 2);
+}
+
 function buildWorkflow() {
   const base = comfyCfg.workflow === "v2" ? WORKFLOW_TEMPLATE_V2 : WORKFLOW_TEMPLATE;
   const wf = (typeof structuredClone === "function") ? structuredClone(base) : JSON.parse(JSON.stringify(base));
-  wf[NODE.prompt].inputs.text = JSON.stringify(buildJSON(), null, 2);
+  wf[NODE.prompt].inputs.text = buildPromptText();
   wf[NODE.resolution].inputs.aspect_ratio = comfyCfg.aspect_ratio;
   wf[NODE.resolution].inputs.megapixels = comfyCfg.megapixels;
   wf[NODE.seed].inputs.noise_seed = comfyCfg.seed;
@@ -1852,6 +1988,7 @@ function openImgModal(index) {
   $("imgVectorize").style.display = "";
   $("imgRotL").style.display = $("imgRotR").style.display = "";
   $("imgLoadSetup").style.display = it.setup ? "" : "none";
+  $("imgRefine").style.display = it.setup ? "" : "none";
   $("imgOverlay").classList.add("show");
   refreshViewerImage(it);
   renderGallery();
@@ -2031,6 +2168,7 @@ function openSvgViewer(svgText, stats) {
   $("imgVectorize").style.display = "none"; // can't vectorize an SVG
   $("imgRotL").style.display = $("imgRotR").style.display = "none";
   $("imgLoadSetup").style.display = "none";
+  $("imgRefine").style.display = "none";
   $("imgOverlay").classList.add("show");
 }
 
@@ -2126,6 +2264,7 @@ $("setupLoad").addEventListener("click", loadSelectedSetup);
 $("setupSaveBtn").addEventListener("click", saveCurrentSetup);
 $("setupDel").addEventListener("click", deleteSelectedSetup);
 $("imgLoadSetup").addEventListener("click", () => { const it = renderHistory[viewerIndex]; if (it && it.setup) { applySetup(it.setup); closeImgModal(); } else toast("This render has no saved setup.", "bad"); });
+$("imgRefine").addEventListener("click", () => { const it = renderHistory[viewerIndex]; if (it && it.setup) { applySetup(it.setup); closeImgModal(); openRefineModal(); } else toast("This render has no saved setup.", "bad"); });
 let settingsOverlayPressedSelf = false;
 $("settingsOverlay").addEventListener("mousedown", e => { settingsOverlayPressedSelf = (e.target === $("settingsOverlay")); });
 $("settingsOverlay").addEventListener("click", e => { if (e.target === $("settingsOverlay") && settingsOverlayPressedSelf) closeSettings(); });
