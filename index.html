@@ -267,7 +267,7 @@
   .render-img-wrap img { cursor: zoom-in; }
 
   /* ---------- render gallery ---------- */
-  .gallery { display: flex; flex-wrap: wrap; gap: 7px; width: 100%; }
+  .gallery { display: flex; flex-wrap: wrap; align-content: flex-start; gap: 7px; width: 100%; max-height: 320px; overflow-y: auto; padding-right: 2px; }
   .gallery .thumb { position: relative; width: 56px; height: 56px; border-radius: var(--r-sm); overflow: hidden; border: 1px solid var(--border); cursor: pointer; background: var(--panel); flex-shrink: 0; transition: border-color .14s, transform .1s; }
   .gallery .thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
   .gallery .thumb:hover { border-color: var(--border-strong); transform: translateY(-1px); }
@@ -545,7 +545,7 @@
       <div class="render-row" style="display:flex; align-items:center; gap:8px;"><span class="status" id="renderStatus" style="flex:1;"></span><button id="renderCancel" title="Stop the current render on ComfyUI" style="display:none; padding:6px 12px;">✕ Cancel</button></div>
       <div class="render-row"><button id="vectorizeBtn" title="Trace flat regions (text/logos/flat art) to vector, keep photographic parts as raster">⬡ Vectorize → SVG</button><button id="vecSettingsBtn" title="Vectorizer settings" style="padding:7px 10px;">⚙</button><span class="status" id="vectorizeStatus" style="flex:1;"></span></div>
       <div id="galleryRow" style="display:none; flex-direction:column; align-items:stretch; gap:6px; width:100%;">
-        <div class="col-title" style="margin:6px 0 0; display:flex; align-items:center; gap:8px;">History <span id="galleryCount" class="count"></span><span style="flex:1"></span><button id="galleryClear" title="Clear gallery list (does not delete files)" style="padding:2px 9px; font-size:11px; text-transform:none; letter-spacing:0;">Clear</button></div>
+        <div class="col-title" style="margin:6px 0 0; display:flex; align-items:center; gap:8px;">History <span id="galleryCount" class="count"></span><span style="flex:1"></span><button id="galleryRescan" title="Rebuild the list from ComfyUI's history — recovers permanently-saved renders that dropped off this browser's list (only while that ComfyUI process is still running)" style="padding:2px 9px; font-size:11px; text-transform:none; letter-spacing:0;">⟳ Rescan</button><button id="gallerySortBtn" title="Toggle order by creation date" style="padding:2px 9px; font-size:11px; text-transform:none; letter-spacing:0;">↓ Newest</button><button id="galleryClear" title="Clear gallery list (does not delete files)" style="padding:2px 9px; font-size:11px; text-transform:none; letter-spacing:0;">Clear</button></div>
         <div class="gallery" id="gallery"></div>
       </div>
         </div>
@@ -2030,7 +2030,7 @@ async function showResult(base, promptId) {
   let img = null;
   for (const nodeId of Object.keys(outputs)) { const o = outputs[nodeId]; if (o.images && o.images.length) { img = o.images[o.images.length - 1]; break; } }
   if (!img) throw new Error("Render finished but produced no image.");
-  const entry = { filename: img.filename, subfolder: img.subfolder || "", type: img.type || "output", seed: comfyCfg.seed, aspect: comfyCfg.aspect_ratio, time: new Date().toLocaleTimeString(), rotation: 0, setup: lastRenderSetup, elements: state.elements.map(e => ({ type: e.type, bbox: e.bbox.slice() })) };
+  const entry = { filename: img.filename, subfolder: img.subfolder || "", type: img.type || "output", seed: comfyCfg.seed, aspect: comfyCfg.aspect_ratio, ts: Date.now(), time: new Date().toLocaleTimeString(), rotation: 0, setup: lastRenderSetup, elements: state.elements.map(e => ({ type: e.type, bbox: e.bbox.slice() })) };
   const el = $("renderImg");
   el.onload = () => { el.style.display = "block"; $("renderPlaceholder").style.display = "none"; };
   el.onerror = () => setRenderStatus("Image rendered but could not be loaded from " + comfyBase() + "/view", "err");
@@ -2043,10 +2043,23 @@ async function showResult(base, promptId) {
 /* ---- render gallery + full-image viewer (session history) ---- */
 const renderHistory = [];
 let viewerIndex = 0;
+let gallerySort = "newest";           // "newest" | "oldest" — order by creation date
 const HIST_KEY = "ideogram_comfy_history";
+const HIST_MAX = 300;                 // most permanent renders kept in localStorage (trimmed further only on quota)
 
 function viewUrl(it) {
   return comfyBase() + "/view?" + new URLSearchParams({ filename: it.filename, subfolder: it.subfolder || "", type: it.type || "output" }).toString();
+}
+// Sort key: explicit timestamp when present, else array order (legacy entries get a tiny ts on load).
+function entryTime(it, idx) { return typeof it.ts === "number" ? it.ts : idx; }
+// Indices into renderHistory in current display order.
+function sortedIndices() {
+  const order = renderHistory.map((_, i) => i);
+  order.sort((a, b) => {
+    const d = entryTime(renderHistory[a], a) - entryTime(renderHistory[b], b);
+    return gallerySort === "newest" ? -d : d;
+  });
+  return order;
 }
 function addRenderToHistory(entry) {
   renderHistory.push(entry);
@@ -2055,11 +2068,25 @@ function addRenderToHistory(entry) {
   renderGallery();
 }
 // Persist only permanent (output/) renders — temp previews would 404 after a reload.
+// Keep up to HIST_MAX; if localStorage rejects the payload (quota), drop the oldest quarter and retry.
 function saveRenderHistory() {
-  try { localStorage.setItem(HIST_KEY, JSON.stringify(renderHistory.filter(e => e.type === "output").slice(-60))); } catch (_) {}
+  let arr = renderHistory.filter(e => e.type === "output").slice(-HIST_MAX);
+  while (arr.length) {
+    try { localStorage.setItem(HIST_KEY, JSON.stringify(arr)); return; }
+    catch (_) { arr = arr.slice(Math.ceil(arr.length / 4)); }
+  }
+  try { localStorage.setItem(HIST_KEY, "[]"); } catch (_) {}
 }
 function loadRenderHistory() {
-  try { const a = JSON.parse(localStorage.getItem(HIST_KEY)); if (Array.isArray(a)) { renderHistory.push(...a); viewerIndex = renderHistory.length - 1; } } catch (_) {}
+  try {
+    const a = JSON.parse(localStorage.getItem(HIST_KEY));
+    if (Array.isArray(a)) {
+      // Backfill a small ascending ts for legacy entries so they sort as oldest, preserving stored order.
+      a.forEach((e, i) => { if (typeof e.ts !== "number") e.ts = i + 1; });
+      renderHistory.push(...a);
+      viewerIndex = renderHistory.length - 1;
+    }
+  } catch (_) {}
 }
 function clearRenderHistory() { renderHistory.length = 0; viewerIndex = 0; saveRenderHistory(); renderGallery(); }
 
@@ -2068,11 +2095,14 @@ function renderGallery() {
   if (!renderHistory.length) { row.style.display = "none"; return; }
   row.style.display = "flex";
   $("galleryCount").textContent = renderHistory.length;
+  const btn = $("gallerySortBtn");
+  if (btn) btn.textContent = gallerySort === "newest" ? "↓ Newest" : "↑ Oldest";
   g.innerHTML = "";
-  renderHistory.forEach((it, i) => {
+  sortedIndices().forEach(i => {
+    const it = renderHistory[i];
     const t = document.createElement("div");
     t.className = "thumb" + (i === viewerIndex ? " active" : "");
-    t.title = "Seed " + it.seed + " · " + it.aspect;
+    t.title = "Seed " + it.seed + " · " + it.aspect + (it.time ? " · " + it.time : "");
     const im = document.createElement("img");
     im.src = viewUrl(it); im.alt = "render " + (i + 1);
     if (it.rotation) im.style.transform = "rotate(" + it.rotation + "deg)";
@@ -2080,6 +2110,117 @@ function renderGallery() {
     t.addEventListener("click", () => openImgModal(i));
     g.appendChild(t);
   });
+}
+
+/* Rebuild the gallery from ComfyUI's own /history. Recovers permanent (output/)
+   renders that were dropped from this browser's saved list — including seed,
+   aspect and the full setup, all of which ComfyUI keeps in the prompt graph.
+   Only works while that ComfyUI process still has the history (lost on restart). */
+function histTimestamp(h) {
+  const msgs = h && h.status && h.status.messages;
+  if (Array.isArray(msgs)) for (const m of msgs) if (Array.isArray(m) && m[1] && typeof m[1].timestamp === "number") return m[1].timestamp;
+  return null;
+}
+function setupFromPromptText(text) {
+  if (typeof text !== "string") return null;
+  const obj = extractJSON(text);
+  if (!obj || !obj.canvas) return null;
+  const w = +obj.canvas.width || COORD, h = +obj.canvas.height || COORD;
+  const cd = obj.compositional_deconstruction || {};
+  const els = Array.isArray(cd.elements) ? cd.elements : [];
+  return {
+    high_level_description: obj.high_level_description || "",
+    style_description: obj.style_description || {},
+    background: cd.background || "",
+    elements: els.map(e => ({
+      type: e.type || "obj",
+      bbox: (Array.isArray(e.bbox) && e.bbox.length === 4)
+        ? [Math.round(e.bbox[0] / w * COORD), Math.round(e.bbox[1] / h * COORD), Math.round(e.bbox[2] / w * COORD), Math.round(e.bbox[3] / h * COORD)]
+        : [100, 100, 500, 500],
+      desc: e.desc || "", color_palette: Array.isArray(e.color_palette) ? e.color_palette : [], vectorize: e.vectorize || "auto"
+    }))
+  };
+}
+function metaFromGraph(graph) {
+  const out = { seed: "?", aspect: "", setup: null, comfy: {} };
+  if (!graph || typeof graph !== "object") return out;
+  for (const n of Object.values(graph)) {
+    const ct = n && n.class_type, inp = (n && n.inputs) || {};
+    if (ct === "RandomNoise" && "noise_seed" in inp) out.seed = inp.noise_seed;
+    else if (out.seed === "?" && "noise_seed" in inp) out.seed = inp.noise_seed;
+    else if (out.seed === "?" && "seed" in inp) out.seed = inp.seed;
+    if (ct === "ResolutionSelector") { if (inp.aspect_ratio) out.aspect = inp.aspect_ratio; if (inp.megapixels != null) out.comfy.megapixels = inp.megapixels; }
+    if (ct === "CLIPTextEncode" && typeof inp.text === "string" && inp.text.trim()) out.setup = setupFromPromptText(inp.text);
+  }
+  if (out.aspect) out.comfy.aspect_ratio = out.aspect;
+  if (out.setup) out.setup.comfy = out.comfy;
+  return out;
+}
+async function rescanComfyHistory() {
+  const base = comfyBase();
+  if (!base) { setRenderStatus("Set your ComfyUI server URL first.", "err"); return; }
+  $("galleryRescan").disabled = true;
+  setRenderStatus('<span class="spinner"></span>Rescanning…', "");
+  const seen = new Set(renderHistory.map(e => (e.type || "output") + "|" + (e.subfolder || "") + "|" + e.filename));
+  const recovered = [];
+  const notes = [];
+
+  // 1) ComfyUI in-memory history — richest source (real timestamps), but wiped on a ComfyUI restart.
+  try {
+    const r = await fetch(base + "/history?max_items=1000");
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    const hist = await r.json();
+    let order = 0;
+    for (const pid of Object.keys(hist || {})) {
+      const h = hist[pid];
+      const outs = h && h.outputs;
+      if (!outs) continue;
+      const meta = metaFromGraph(Array.isArray(h.prompt) ? h.prompt[2] : null);
+      const ts = histTimestamp(h);
+      for (const nodeId of Object.keys(outs)) {
+        const imgs = outs[nodeId] && outs[nodeId].images;
+        if (!Array.isArray(imgs)) continue;
+        for (const img of imgs) {
+          if ((img.type || "output") !== "output") continue;       // temp previews 404 after a restart
+          const key = "output|" + (img.subfolder || "") + "|" + img.filename;
+          if (seen.has(key)) { order++; continue; }
+          seen.add(key);
+          recovered.push({ filename: img.filename, subfolder: img.subfolder || "", type: "output", seed: meta.seed, aspect: meta.aspect, ts: ts || (order + 1), rotation: 0, setup: meta.setup });
+          order++;
+        }
+      }
+    }
+  } catch (e) { notes.push("ComfyUI history unavailable (" + (e.message || e) + ")"); }
+
+  // 2) Disk scan via the proxy's /ideogrammar/outputs — survives ComfyUI restarts (needs --output-dir).
+  //    Seed/aspect/setup come from each PNG's embedded prompt graph; the date sort uses file mtime.
+  try {
+    const r = await fetch(base + "/ideogrammar/outputs?limit=3000");
+    if (r.ok) {
+      const j = await r.json();
+      if (j && j.available && Array.isArray(j.files)) {
+        for (const f of j.files) {
+          const key = "output|" + (f.subfolder || "") + "|" + f.filename;
+          if (seen.has(key)) continue;
+          seen.add(key);
+          const meta = metaFromGraph(f.prompt || null);
+          recovered.push({ filename: f.filename, subfolder: f.subfolder || "", type: "output", seed: meta.seed, aspect: meta.aspect, ts: f.mtime || 1, rotation: 0, setup: meta.setup });
+        }
+        if (j.truncated) notes.push("disk scan hit its file cap — some older files skipped");
+      } else if (j && j.available === false) {
+        notes.push(j.reason || "disk scan off — set --output-dir on the proxy");
+      }
+    }
+  } catch (_) { /* endpoint absent (e.g. Connect-directly mode bypasses the proxy) — ignore */ }
+
+  $("galleryRescan").disabled = false;
+  const tail = notes.length ? " — " + notes.join("; ") : "";
+  if (!recovered.length) { setRenderStatus("Rescan: nothing new to recover." + tail, notes.length ? "err" : ""); toast("Nothing new to recover", ""); return; }
+  renderHistory.push(...recovered);
+  saveRenderHistory();
+  renderGallery();
+  setRenderStatus("Recovered " + recovered.length + " render" + (recovered.length === 1 ? "" : "s") + " ✓" + tail, "ok");
+  toast("Recovered " + recovered.length + " ✓", "ok");
 }
 
 const rotCache = new Map();
@@ -2109,7 +2250,8 @@ function bakeRotated(url, deg) {
 }
 async function refreshViewerImage(it) {
   const deg = it.rotation || 0;
-  $("imgInfo").textContent = `#${viewerIndex + 1} of ${renderHistory.length} · seed ${it.seed} · ${it.aspect}` + (deg ? ` · rot ${deg}°` : "") + (it.time ? " · " + it.time : "");
+  const pos = sortedIndices().indexOf(viewerIndex);
+  $("imgInfo").textContent = `#${pos + 1} of ${renderHistory.length} · seed ${it.seed} · ${it.aspect}` + (deg ? ` · rot ${deg}°` : "") + (it.time ? " · " + it.time : "");
   let u;
   try { u = await bakeRotated(viewUrl(it), deg); } catch (_) { u = viewUrl(it); }
   $("imgFull").src = u;
@@ -2129,8 +2271,9 @@ function openImgModal(index) {
   if (!renderHistory.length) return;
   viewerIndex = Math.max(0, Math.min(renderHistory.length - 1, index));
   const it = renderHistory[viewerIndex];
-  $("imgPrev").style.visibility = viewerIndex > 0 ? "visible" : "hidden";
-  $("imgNext").style.visibility = viewerIndex < renderHistory.length - 1 ? "visible" : "hidden";
+  const order = sortedIndices(), pos = order.indexOf(viewerIndex);
+  $("imgPrev").style.visibility = pos > 0 ? "visible" : "hidden";
+  $("imgNext").style.visibility = pos < order.length - 1 ? "visible" : "hidden";
   $("imgVectorize").style.display = "";
   $("imgRotL").style.display = $("imgRotR").style.display = "";
   $("imgLoadSetup").style.display = it.setup ? "" : "none";
@@ -2140,7 +2283,11 @@ function openImgModal(index) {
   renderGallery();
 }
 function closeImgModal() { $("imgOverlay").classList.remove("show"); }
-function stepImg(d) { openImgModal(viewerIndex + d); }
+function stepImg(d) {
+  const order = sortedIndices(), pos = order.indexOf(viewerIndex) + d;
+  if (pos < 0 || pos >= order.length) return;
+  openImgModal(order[pos]);
+}
 
 /* ---- vectorize (raster -> hybrid SVG via the proxy /vectorize endpoint) ---- */
 const VEC_KEY = "ideogram_vec_cfg";
@@ -2416,6 +2563,8 @@ $("settingsOverlay").addEventListener("mousedown", e => { settingsOverlayPressed
 $("settingsOverlay").addEventListener("click", e => { if (e.target === $("settingsOverlay") && settingsOverlayPressedSelf) closeSettings(); });
 document.addEventListener("keydown", e => { if (e.key === "Escape" && $("settingsOverlay").classList.contains("show")) closeSettings(); });
 $("galleryClear").addEventListener("click", () => { if (renderHistory.length && confirm("Clear the render gallery? This only clears the list here — files in ComfyUI's output/ are not deleted.")) clearRenderHistory(); });
+$("gallerySortBtn").addEventListener("click", () => { gallerySort = gallerySort === "newest" ? "oldest" : "newest"; renderGallery(); });
+$("galleryRescan").addEventListener("click", rescanComfyHistory);
 let imgOverlayPressedSelf = false;
 $("imgOverlay").addEventListener("mousedown", e => { imgOverlayPressedSelf = (e.target === $("imgOverlay")); });
 $("imgOverlay").addEventListener("click", e => { if (e.target === $("imgOverlay") && imgOverlayPressedSelf) closeImgModal(); });

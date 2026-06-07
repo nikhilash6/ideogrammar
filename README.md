@@ -127,7 +127,9 @@ If SAM fails to load it silently falls back to the heuristic, so the feature nev
 >
 > `vit_l` / `vit_h` checkpoints give sharper masks at higher cost. `models/` and `.venv/` are gitignored.
 
-**Gallery & saving.** Every render is added to a **History** strip below the result; click the result image or any thumbnail to open a full-size **viewer modal** with prev/next (arrow keys), **rotate 90° CW/CCW** (saved per item; applied to the view, the download, the gallery thumbnail, and vectorize), seed/aspect info, and a download link. By default renders are ComfyUI **temp** files, so the gallery is session-only. Tick **Save renders permanently** to switch the output node to `SaveImage` (files land in ComfyUI's `output/` as `ideogrammar_*.png`); those renders persist in the gallery across reloads (stored in `localStorage`, last 60). **Clear** empties the gallery list only — it never deletes files from `output/`.
+**Gallery & saving.** Every render is added to a **History** strip below the result; click the result image or any thumbnail to open a full-size **viewer modal** with prev/next (arrow keys), **rotate 90° CW/CCW** (saved per item; applied to the view, the download, the gallery thumbnail, and vectorize), seed/aspect info, and a download link. The strip is scrollable and has a **↓ Newest / ↑ Oldest** toggle that sorts by creation date. By default renders are ComfyUI **temp** files, so the gallery is session-only. Tick **Save renders permanently** to switch the output node to `SaveImage` (files land in ComfyUI's `output/` as `ideogrammar_*.png`); those renders persist in the gallery across reloads (stored in `localStorage`, up to 300). **Clear** empties the gallery list only — it never deletes files from `output/`.
+
+**Recovering renders (⟳ Rescan).** If the gallery list gets out of sync with what's actually on disk (e.g. it was trimmed, cleared, or opened in another browser), **⟳ Rescan** in the History header rebuilds it. It merges two sources, deduped by filename: (1) **ComfyUI's `/history`** — every render the running ComfyUI still remembers, including seed, aspect and the full setup (from the prompt graph); and (2) a **disk scan** of ComfyUI's `output/` folder via the proxy, which survives a ComfyUI restart. The disk scan reads seed/aspect/setup back out of each PNG's embedded `prompt` metadata and orders by file mtime. It only runs when the proxy is started with `--output-dir` pointing at a readable `output/` folder (see below); without it, Rescan falls back to `/history` alone.
 
 ### The CORS problem (and why the proxy exists)
 
@@ -167,7 +169,10 @@ python comfy_proxy.py --comfy http://192.168.2.33:8188 --host 0.0.0.0 --port 818
 | `--host ADDR` | `127.0.0.1` | bind address (`0.0.0.0` to expose on LAN) |
 | `--port N` | `8189` | port to serve on |
 | `--html PATH` | `./index.html` | page to serve |
+| `--output-dir PATH` | _(unset)_ | ComfyUI's `output/` folder, readable by the proxy — enables gallery recovery (**⟳ Rescan**) from disk, surviving ComfyUI restarts |
 | `--verbose` | off | log every request |
+
+> `--output-dir` only works when the proxy can read that folder directly (i.e. it runs on the ComfyUI host or has the folder network-mounted). It's read-only — the proxy lists files and parses PNG metadata; it never writes or deletes.
 
 Both are stdlib-only (Python 3.8+) — nothing to install.
 
@@ -219,7 +224,7 @@ The **Test connection** button in the ComfyUI panel pings `/system_stats` and re
 | File | Purpose |
 |------|---------|
 | [`index.html`](index.html) | The entire app — editor, canvas, LLM generation, ComfyUI mode. |
-| [`comfy_proxy.py`](comfy_proxy.py) | Stdlib proxy: serves the page + local asset files (e.g. `vendor/`), forwards HTTP and the WebSocket to ComfyUI (same-origin, no CORS flags), and hosts the `/vectorize` endpoint (optional `vtracer`/`pillow` deps). |
+| [`comfy_proxy.py`](comfy_proxy.py) | Stdlib proxy: serves the page + local asset files (e.g. `vendor/`), forwards HTTP and the WebSocket to ComfyUI (same-origin, no CORS flags), and hosts the `/vectorize` endpoint (optional `vtracer`/`pillow` deps) plus `/ideogrammar/outputs` (gallery recovery; needs `--output-dir`). |
 | [`comfy_proxy.sh`](comfy_proxy.sh) | start/stop/status/restart/logs helper, plus `install-service`/`uninstall-service` to run it as a background systemd service. |
 | [`workflow.json`](workflow.json) | The Ideogram 4 ComfyUI workflow (API format) the render mode is built around; also embedded in `index.html`. |
 | [`vendor/`](vendor/) | Bundled third-party assets (GridStack JS/CSS) served locally by the proxy, so the tiled layout works without a CDN. |

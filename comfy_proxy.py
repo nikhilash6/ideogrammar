@@ -39,6 +39,7 @@ import select
 import socket
 import sys
 import threading
+import zlib
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlsplit, unquote, urlencode
 
@@ -128,6 +129,125 @@ class Handler(BaseHTTPRequestHandler):
         except Exception:
             return None
 
+    def _send_json(self, obj, code=200):
+        body = json.dumps(obj).encode()
+        self.send_response(code)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self._cors()
+        self.end_headers()
+        self.wfile.write(body)
+
+    # ---- gallery recovery: list ComfyUI's output/ folder from disk ----
+    # Survives a ComfyUI restart (unlike /history, which is in-memory only).
+    # Requires --output-dir to point at a folder this proxy can read.
+    _IMG_EXT = (".png", ".jpg", ".jpeg", ".webp")
+
+    def _png_prompt_graph(self, path):
+        # Pull ComfyUI's embedded "prompt" (API prompt graph) from a PNG's text
+        # chunks, without decoding pixels. Returns the parsed graph dict or None.
+        try:
+            with open(path, "rb") as f:
+                if f.read(8) != b"\x89PNG\r\n\x1a\n":
+                    return None
+                texts = {}
+                while True:
+                    head = f.read(8)
+                    if len(head) < 8:
+                        break
+                    length = int.from_bytes(head[:4], "big")
+                    ctype = head[4:8]
+                    if ctype in (b"IDAT", b"IEND"):
+                        break  # all metadata sits before the pixel data
+                    if ctype in (b"tEXt", b"zTXt", b"iTXt"):
+                        data = f.read(length)
+                        f.read(4)  # skip CRC
+                        kw, val = self._parse_png_text(ctype, data)
+                        if kw is not None:
+                            texts[kw] = val
+                    else:
+                        f.seek(length + 4, io.SEEK_CUR)  # skip data + CRC
+                raw = texts.get("prompt")
+                if not raw:
+                    return None
+                return json.loads(raw)
+        except Exception:
+            return None
+
+    @staticmethod
+    def _parse_png_text(ctype, data):
+        try:
+            if ctype == b"tEXt":
+                kw, _, txt = data.partition(b"\x00")
+                return kw.decode("latin-1"), txt.decode("latin-1")
+            if ctype == b"zTXt":
+                kw, _, rest = data.partition(b"\x00")
+                # rest = method(1 byte) + zlib-compressed text
+                return kw.decode("latin-1"), zlib.decompress(rest[1:]).decode("latin-1")
+            if ctype == b"iTXt":
+                kw, _, rest = data.partition(b"\x00")
+                comp_flag = rest[0:1]
+                rest = rest[2:]                          # drop compression flag + method
+                _, _, rest = rest.partition(b"\x00")     # drop language tag
+                _, _, txt = rest.partition(b"\x00")      # drop translated keyword
+                if comp_flag == b"\x01":
+                    txt = zlib.decompress(txt)
+                return kw.decode("latin-1"), txt.decode("utf-8", "replace")
+        except Exception:
+            pass
+        return None, None
+
+    def _list_outputs(self):
+        root = ARGS.output_dir
+        if not root or not os.path.isdir(root):
+            self._send_json({
+                "available": False,
+                "reason": "This proxy has no --output-dir set (or it isn't a readable folder). "
+                          "Restart it with --output-dir pointing at ComfyUI's output/ directory.",
+            })
+            return
+        from urllib.parse import parse_qs
+        q = parse_qs(urlsplit(self.path).query)
+        prefix = (q.get("prefix", [""])[0] or "")
+        try:
+            limit = max(1, min(5000, int(q.get("limit", ["3000"])[0])))
+        except ValueError:
+            limit = 3000
+        # Cheap pass: collect candidate files + mtime (no PNG parsing yet).
+        cands = []
+        scanned = 0
+        for dirpath, _dirs, files in os.walk(root):
+            for name in files:
+                if not name.lower().endswith(self._IMG_EXT):
+                    continue
+                if prefix and not name.startswith(prefix):
+                    continue
+                scanned += 1
+                if scanned > 40000:
+                    break
+                fp = os.path.join(dirpath, name)
+                try:
+                    mtime = os.path.getmtime(fp)
+                except OSError:
+                    continue
+                sub = os.path.relpath(dirpath, root)
+                sub = "" if sub == "." else sub.replace(os.sep, "/")
+                cands.append((mtime, fp, name, sub))
+            if scanned > 40000:
+                break
+        cands.sort(key=lambda c: c[0], reverse=True)
+        cands = cands[:limit]
+        files_out = []
+        for mtime, fp, name, sub in cands:
+            entry = {"filename": name, "subfolder": sub, "type": "output", "mtime": int(mtime * 1000)}
+            if name.lower().endswith(".png"):
+                g = self._png_prompt_graph(fp)
+                if g is not None:
+                    entry["prompt"] = g
+            files_out.append(entry)
+        self._send_json({"available": True, "files": files_out, "truncated": scanned > limit})
+
     def _vectorize(self):
         length = int(self.headers.get("Content-Length", 0) or 0)
         raw = self.rfile.read(length) if length else b"{}"
@@ -186,6 +306,9 @@ class Handler(BaseHTTPRequestHandler):
         path = self.path.split("?", 1)[0]
         if self._is_ws():
             self._relay_websocket()
+            return
+        if path == "/ideogrammar/outputs":
+            self._list_outputs()
             return
         if path in ("/", "/index.html"):
             self._serve_index()
@@ -590,6 +713,7 @@ def main():
     p.add_argument("--host", default="127.0.0.1", help="address to bind (use 0.0.0.0 to expose on LAN)")
     p.add_argument("--port", type=int, default=8189, help="port to serve on")
     p.add_argument("--html", default=os.path.join(here, "index.html"), help="path to index.html")
+    p.add_argument("--output-dir", default="", help="ComfyUI output/ folder (readable by this proxy) — enables gallery recovery via the editor's Rescan button, surviving ComfyUI restarts")
     p.add_argument("--timeout", type=float, default=600.0, help="upstream timeout (s)")
     p.add_argument("--verbose", action="store_true", help="log every request")
     ARGS = p.parse_args()
@@ -600,6 +724,9 @@ def main():
     print("Ideogrammar proxy running")
     print("  open:       %s" % url)
     print("  forwarding: %s" % ARGS.comfy)
+    if ARGS.output_dir:
+        ok = os.path.isdir(ARGS.output_dir)
+        print("  output dir: %s%s" % (ARGS.output_dir, "" if ok else "  (NOT a readable folder — gallery recovery disabled)"))
     print("  editor Server URL: leave blank (uses this origin) or set %s" % url.rstrip("/"))
     print("Press Ctrl+C to stop.")
     try:
