@@ -238,6 +238,12 @@
   .status.ok { color: var(--success); }
   .chip { padding: 5px 10px; font-size: 11px; border: 1px solid var(--border-strong); background: var(--bg); color: var(--muted); border-radius: var(--r); }
   .chip:hover { color: var(--text); border-color: var(--accent); }
+  .img-drop { border: 1px dashed var(--border-strong); border-radius: var(--r); padding: 16px; text-align: center; cursor: pointer; transition: border-color .12s, background .12s; }
+  .img-drop:hover { border-color: var(--accent); }
+  .img-drop.dragover { border-color: var(--accent); background: var(--bg); }
+  .img-drop-prompt { font-size: 12px; color: var(--faint); line-height: 1.5; }
+  .img-drop-preview { display: flex; align-items: center; gap: 12px; text-align: left; }
+  .img-drop-preview img { max-width: 120px; max-height: 120px; border-radius: var(--r); border: 1px solid var(--border); display: block; }
   .seg { display: inline-flex; border: 1px solid var(--border-strong); border-radius: var(--r); overflow: hidden; }
   .seg button { border: none; border-radius: 0; padding: 7px 16px; background: var(--bg); font-weight: 500; }
   .seg button:hover { transform: none; }
@@ -313,7 +319,7 @@
   </div>
   <div class="btn-row">
     <button class="primary comfy-only" id="renderBtn">🎨 Render</button>
-    <button class="primary" id="generateBtn">✨ Generate from text</button>
+    <button class="primary" id="generateBtn">✨ Generate prompt</button>
     <button id="refineBtn" title="Ask the model to adjust the current setup">🪄 Refine</button>
     <button id="importBtn">Import</button>
     <button id="resetBtn">Reset</button>
@@ -567,13 +573,25 @@
 <div class="overlay" id="genOverlay">
   <div class="modal">
     <div class="modal-head">
-      <h2>✨ Generate a setup from a description</h2>
+      <h2>✨ Generate a setup from a description or image</h2>
       <button class="close" id="genClose">×</button>
     </div>
     <div class="modal-body">
       <div class="hint" style="margin-bottom:10px;">Uses the model configured in <b>⚙ Settings</b>. <button type="button" id="genOpenSettings" style="padding:2px 8px;font-size:11px;">Open settings</button></div>
       <label>Describe the image you want</label>
       <textarea id="genPrompt" rows="5" placeholder="e.g. A bold 80s synthwave concert poster for a band called NEON TIDE, with a retro sports car driving toward a setting sun, palm trees, and a grid floor. Big chrome title at the top, tour dates at the bottom."></textarea>
+      <label style="margin-top:12px;">…or build from an image <span style="color:var(--faint)">(optional — needs a vision-capable model)</span></label>
+      <div class="img-drop" id="genImageDrop">
+        <input type="file" id="genImageInput" accept="image/*" hidden>
+        <div class="img-drop-prompt" id="genImageHint">Click or drop an image here. The model reads its content, style, colors and any text, then builds a matching setup. Text above is used as extra guidance.</div>
+        <div class="img-drop-preview" id="genImagePreview" style="display:none;">
+          <img id="genImageThumb" alt="upload preview">
+          <div>
+            <div id="genImageName" style="font-size:12px;color:var(--muted);word-break:break-all;"></div>
+            <button type="button" id="genImageClear" class="ghost" style="margin-top:8px;padding:4px 10px;font-size:11px;">Remove image</button>
+          </div>
+        </div>
+      </div>
       <div class="hint">The model returns the full schema (style, background, positioned objects). You can edit everything afterwards. Press ⌘/Ctrl + Enter to generate.</div>
     </div>
     <div class="modal-foot">
@@ -1307,32 +1325,52 @@ Rules:
 - All colors are uppercase 6-digit hex like "#1A2B3C". Give each element a small palette (1-4 colors) that matches it.
 - Be concrete and specific. Return valid JSON only.`;
 
+const IMAGE_SYSTEM_PROMPT = SYSTEM_PROMPT + `
+
+IMAGE MODE: You are given an actual IMAGE (and possibly some extra text guidance). Look at the image carefully and reconstruct it as the JSON schema above: capture its overall subject in high_level_description, its art style / medium / lighting / dominant color palette in style_description, and decompose it into the key positioned elements — the background, the main subject(s), distinct objects, logos, and any literal text you can READ in the image (put the exact words in the text element's desc). Estimate each element's bbox from where it actually sits in the image, mapped onto the 1000x1000 canvas. If extra text guidance is given, let it steer wording or adjustments, but stay faithful to what the image shows.`;
+
 const REFINE_SYSTEM_PROMPT = SYSTEM_PROMPT + `
 
 REFINEMENT MODE: You are given an EXISTING setup as JSON and a change request. Return the COMPLETE updated setup in the exact same shape — not a diff, not only the changed fields. Apply the requested change faithfully and adjust whatever else is needed for it to make sense (e.g. "lighter composition" may touch lighting, palette, background, element sizes and positions). Preserve everything the request does not affect: keep unrelated descriptions, the element set, types and bboxes the same unless the change implies otherwise. Keep the same kinds/number of elements unless the request asks to add or remove some.`;
 
 let generating = false;
+let genImageDataUrl = null;   // base64 data URL of an uploaded reference image, or null
 
 async function runGeneration() {
   if (generating) return;
   const cfg = loadCfg();
   const userPrompt = $("genPrompt").value.trim();
-  if (!userPrompt) { setGenStatus("Describe the image first.", "err"); return; }
+  if (!userPrompt && !genImageDataUrl) { setGenStatus("Describe the image, or upload one, first.", "err"); return; }
   if (!cfg.baseUrl) { setGenStatus("Set a Base URL in ⚙ Settings.", "err"); openSettings(); return; }
   if (!cfg.model) { setGenStatus("Set a Model name in ⚙ Settings.", "err"); openSettings(); return; }
   if (cfg.provider === "openrouter" && !cfg.apiKey) { setGenStatus("OpenRouter needs an API key (⚙ Settings).", "err"); openSettings(); return; }
 
   generating = true;
   $("genRun").disabled = true;
-  setGenStatus('<span class="spinner"></span>Contacting model…', "");
+  setGenStatus('<span class="spinner"></span>' + (genImageDataUrl ? "Reading image…" : "Contacting model…"), "");
 
   const headers = { "Content-Type": "application/json" };
   if (cfg.apiKey) headers["Authorization"] = "Bearer " + cfg.apiKey;
   if (cfg.provider === "openrouter") { headers["HTTP-Referer"] = location.origin; headers["X-Title"] = "Ideogrammar"; }
 
+  let systemContent, userContent;
+  if (genImageDataUrl) {
+    systemContent = IMAGE_SYSTEM_PROMPT;
+    const text = userPrompt
+      ? "Build the structured layout JSON from the attached image. Extra guidance: " + userPrompt
+      : "Build the structured layout JSON from the attached image.";
+    userContent = [
+      { type: "text", text },
+      { type: "image_url", image_url: { url: genImageDataUrl } }
+    ];
+  } else {
+    systemContent = SYSTEM_PROMPT;
+    userContent = "Description:\n" + userPrompt;
+  }
+
   const body = {
     model: cfg.model,
-    messages: [{ role: "system", content: SYSTEM_PROMPT }, { role: "user", content: "Description:\n" + userPrompt }],
+    messages: [{ role: "system", content: systemContent }, { role: "user", content: userContent }],
     temperature: 0.7,
     response_format: { type: "json_object" }
   };
@@ -1378,6 +1416,31 @@ function extractJSON(text) {
 function setGenStatus(html, cls) { const s = $("genStatus"); s.innerHTML = html; s.className = "status" + (cls ? " " + cls : ""); }
 function openGenModal() { applyCfgToForm(); setGenStatus("", ""); $("genOverlay").classList.add("show"); $("genPrompt").focus(); }
 function closeGenModal() { $("genOverlay").classList.remove("show"); }
+
+const MAX_IMAGE_BYTES = 8 * 1024 * 1024;   // 8 MB cap on the uploaded reference image
+function setGenImage(file) {
+  if (!file) return;
+  if (!file.type.startsWith("image/")) { setGenStatus("That file isn't an image.", "err"); return; }
+  if (file.size > MAX_IMAGE_BYTES) { setGenStatus("Image is larger than 8 MB — pick a smaller one.", "err"); return; }
+  const reader = new FileReader();
+  reader.onload = () => {
+    genImageDataUrl = reader.result;
+    $("genImageThumb").src = genImageDataUrl;
+    $("genImageName").textContent = file.name + " · " + Math.round(file.size / 1024) + " KB";
+    $("genImageHint").style.display = "none";
+    $("genImagePreview").style.display = "flex";
+    setGenStatus("", "");
+  };
+  reader.onerror = () => setGenStatus("Could not read that image file.", "err");
+  reader.readAsDataURL(file);
+}
+function clearGenImage() {
+  genImageDataUrl = null;
+  $("genImageInput").value = "";
+  $("genImageThumb").src = "";
+  $("genImagePreview").style.display = "none";
+  $("genImageHint").style.display = "block";
+}
 
 let refining = false;
 function setRefineStatus(html, cls) { const s = $("refineStatus"); s.innerHTML = html; s.className = "status" + (cls ? " " + cls : ""); }
@@ -1480,6 +1543,18 @@ $("genOverlay").addEventListener("mousedown", e => { overlayPressedSelf = (e.tar
 $("genOverlay").addEventListener("click", e => { if (e.target === $("genOverlay") && overlayPressedSelf) closeGenModal(); });
 $("genPrompt").addEventListener("keydown", e => { if ((e.metaKey || e.ctrlKey) && e.key === "Enter") runGeneration(); });
 document.addEventListener("keydown", e => { if (e.key === "Escape" && $("genOverlay").classList.contains("show")) closeGenModal(); });
+
+// generate-from-image upload
+$("genImageDrop").addEventListener("click", e => { if (!e.target.closest("#genImagePreview")) $("genImageInput").click(); });
+$("genImageInput").addEventListener("change", e => { if (e.target.files[0]) setGenImage(e.target.files[0]); });
+$("genImageClear").addEventListener("click", clearGenImage);
+$("genImageDrop").addEventListener("dragover", e => { e.preventDefault(); $("genImageDrop").classList.add("dragover"); });
+$("genImageDrop").addEventListener("dragleave", () => $("genImageDrop").classList.remove("dragover"));
+$("genImageDrop").addEventListener("drop", e => {
+  e.preventDefault();
+  $("genImageDrop").classList.remove("dragover");
+  if (e.dataTransfer.files[0]) setGenImage(e.dataTransfer.files[0]);
+});
 
 // refine modal
 $("refineBtn").addEventListener("click", openRefineModal);

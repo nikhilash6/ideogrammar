@@ -1,6 +1,6 @@
 # Ideogrammar — Ideogram 4 Prompt Editor
 
-A single-file, no-build web app for composing structured **Ideogram 4** prompts. You lay out a scene visually on a 1000×1000 canvas, describe each element, and the app emits the exact JSON the Ideogram 4 model expects. It can also generate a whole setup from a one-line description via an LLM, and — in **ComfyUI mode** — render the prompt on your own ComfyUI server and show the result inline.
+A single-file, no-build web app for composing structured **Ideogram 4** prompts. You lay out a scene visually on a 1000×1000 canvas, describe each element, and the app emits the exact JSON the Ideogram 4 model expects. It can also generate a whole setup from a one-line description — or from an uploaded reference image — via an LLM, and — in **ComfyUI mode** — render the prompt on your own ComfyUI server and show the result inline.
 
 Everything lives in [`index.html`](index.html) (HTML + CSS + vanilla JS, no dependencies, no build step). [`comfy_proxy.py`](comfy_proxy.py) is an optional helper for ComfyUI mode.
 
@@ -10,7 +10,7 @@ Everything lives in [`index.html`](index.html) (HTML + CSS + vanilla JS, no depe
 - **Visual layout canvas** — drag/resize bounding boxes on a 1000×1000 grid (origin top-left). Each box is an element with a type, description, and color palette. The canvas reshapes to the selected aspect ratio.
 - **Structured prompt builder** — high-level description, style block (aesthetics, lighting, photo, medium, palette), background, and a reorderable list of elements.
 - **Live JSON output** — syntax-highlighted, copy or download with one click.
-- **Generate from text** — describe the image in plain language and an OpenAI-compatible LLM (OpenRouter or a local `llama.cpp` server) fills in the whole schema. Settings are stored in `localStorage`.
+- **Generate prompt** — describe the image in plain language, **or upload/drop a reference image** (with a vision-capable model), and an OpenAI-compatible LLM (OpenRouter or a local `llama.cpp` server) fills in the whole schema. Settings are stored in `localStorage`.
 - **Refine** — ask the LLM to adjust the current setup with a plain-language change (e.g. "make it a lighter composition"); it rewrites the whole setup while keeping everything the request doesn't touch.
 - **ComfyUI mode** — render the current prompt on your ComfyUI server using the bundled Ideogram 4 workflow, with every workflow parameter exposed and the result (plus live progress) shown in the editor. Renders collect in a gallery with a full-size viewer, and can be saved permanently.
 - **Import / Reset / Download** — round-trip the prompt JSON.
@@ -54,14 +54,16 @@ The **⚙ Settings** button (header) opens one dialog for everything not tied to
 - **Vectorizer** — mask method (SAM / heuristic / none) and flatness threshold.
 - **Setups & library** — save/load/delete named **setups** (the full prompt builder state + render parameters).
 
-## Generate from text (LLM)
+## Generate prompt (LLM)
 
 Configure a provider in **⚙ Settings** (OpenAI-compatible):
 
 - **OpenRouter** — base URL `https://openrouter.ai/api/v1`, your API key, a model like `anthropic/claude-3.5-sonnet`.
 - **Local llama.cpp** — run `llama-server` with CORS enabled; base URL `http://<host>:8081/v1`.
 
-Then click **✨ Generate from text**, describe the image, and the model returns the full schema, which you can edit visually. Settings/presets are saved in your browser only.
+Then click **✨ Generate prompt**, describe the image, and the model returns the full schema, which you can edit visually. Settings/presets are saved in your browser only.
+
+**From an image.** In the same dialog you can **click or drag-drop a reference image** (up to 8 MB) instead of, or alongside, the text. The model reads the image's subject, style, lighting, colors and any literal text, then reconstructs it as a full editable setup — estimating each element's position on the 1000×1000 canvas. The text box, when used together with an image, acts as extra guidance. This needs a **vision-capable model** (e.g. `anthropic/claude-3.5-sonnet`, `openai/gpt-4o`); a text-only model will reject the image.
 
 ## Refine (LLM)
 
