@@ -65,6 +65,12 @@
     border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--panel);
   }
   .spacer { flex: 1; }
+  .gpu-mon { align-items: center; gap: 10px; padding: 3px 9px; border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--panel); }
+  .gpu-mon .gpu-g { display: flex; flex-direction: column; gap: 2px; align-items: flex-start; }
+  .gpu-mon canvas { display: block; border-radius: 2px; background: var(--bg); }
+  .gpu-mon .gpu-cap { font-size: 9px; line-height: 1; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; text-transform: uppercase; letter-spacing: .04em; }
+  .gpu-mon .gpu-cap b { color: var(--text); font-weight: 600; font-size: 10px; }
+  .gpu-mon.stale { opacity: .5; }
 
   /* ---------- layout ---------- */
   .layout { flex: 1; display: grid; grid-template-columns: 380px 1fr 440px; min-height: 0; }
@@ -253,6 +259,7 @@
 
   /* ---------- comfyui mode ---------- */
   .comfy-only { display: none; }
+  body.comfy-mode #gpuMon { display: flex; }
   body.comfy-mode #comfyPanel { display: block; }
   body.comfy-mode #renderResult { display: flex; }
   body.comfy-mode #renderBtn { display: inline-block; }
@@ -313,6 +320,16 @@
   </div>
   <span class="badge">1000 × 1000 bbox space</span>
   <div class="spacer"></div>
+  <div class="gpu-mon comfy-only" id="gpuMon" title="ComfyUI GPU usage">
+    <div class="gpu-g">
+      <span class="gpu-cap">GPU <b id="gpuUtilPct">—</b></span>
+      <canvas id="gpuUtilSpark" width="64" height="20"></canvas>
+    </div>
+    <div class="gpu-g">
+      <span class="gpu-cap">VRAM <b id="gpuVramPct">—</b></span>
+      <canvas id="gpuVramSpark" width="64" height="20"></canvas>
+    </div>
+  </div>
   <div class="seg" id="modeSeg" title="Manual = copy the JSON yourself · ComfyUI = render it on your server">
     <button type="button" data-mode="manual">Manual</button>
     <button type="button" data-mode="comfy">ComfyUI</button>
@@ -1697,7 +1714,124 @@ function applyMode() {
   document.body.classList.toggle("comfy-mode", comfyCfg.mode === "comfy");
   document.querySelectorAll("#modeSeg button").forEach(b => b.classList.toggle("active", b.dataset.mode === comfyCfg.mode));
   applyCanvasAspect();
+  syncGpuMonitor();
 }
+
+/* ---- GPU monitor -------------------------------------------------------- */
+// Prefers Crystools' `crystools.monitor` websocket feed (real GPU utilization
+// + temperature); falls back to polling /system_stats for VRAM if Crystools
+// isn't sending. The sparkline plots utilization when available, else VRAM.
+const GPU_SAMPLES = 64;
+let utilHist = [];
+let vramHist = [];
+let gpuTimer = null;          // HTTP VRAM fallback poll
+let gpuWS = null;             // crystools monitor socket
+let gpuWSRetry = null;
+let gpuLastCrystools = 0;     // ts of last crystools.monitor message
+
+function gpuActive() {
+  return comfyCfg.mode === "comfy" && !!comfyBase() && document.visibilityState !== "hidden";
+}
+
+function syncGpuMonitor() {
+  if (gpuActive()) {
+    if (!gpuWS) openGpuWS();
+    if (!gpuTimer) { pollGpu(); gpuTimer = setInterval(pollGpu, 2000); }
+  } else {
+    if (gpuTimer) { clearInterval(gpuTimer); gpuTimer = null; }
+    if (gpuWSRetry) { clearTimeout(gpuWSRetry); gpuWSRetry = null; }
+    if (gpuWS) { try { gpuWS.onclose = null; gpuWS.close(); } catch (_) {} gpuWS = null; }
+  }
+}
+
+function openGpuWS() {
+  const base = comfyBase();
+  if (!base) return;
+  let ws;
+  // Distinct clientId so we don't clobber the render socket in ComfyUI's registry.
+  try { ws = new WebSocket(base.replace(/^http/i, "ws") + "/ws?clientId=" + encodeURIComponent(getClientId() + ":mon")); }
+  catch (_) { return; }
+  gpuWS = ws;
+  ws.onmessage = (ev) => {
+    if (typeof ev.data !== "string") return;
+    let m; try { m = JSON.parse(ev.data); } catch (_) { return; }
+    if (m.type !== "crystools.monitor" || !m.data) return;
+    const g = (m.data.gpus || [])[0];
+    if (!g) return;
+    gpuLastCrystools = Date.now();
+    const vramFrac = g.vram_total ? g.vram_used / g.vram_total : (g.vram_used_percent != null ? g.vram_used_percent / 100 : null);
+    applyGpu((g.gpu_utilization || 0) / 100, vramFrac, { vram_used: g.vram_used, vram_total: g.vram_total, temp: g.gpu_temperature });
+  };
+  ws.onerror = () => { try { ws.close(); } catch (_) {} };
+  ws.onclose = () => {
+    if (gpuWS === ws) gpuWS = null;
+    if (gpuActive() && !gpuWSRetry) gpuWSRetry = setTimeout(() => { gpuWSRetry = null; if (gpuActive()) openGpuWS(); }, 3000);
+  };
+}
+
+async function pollGpu() {
+  if (Date.now() - gpuLastCrystools < 5000) return;   // Crystools is feeding us
+  const base = comfyBase();
+  if (!base) return;
+  try {
+    const r = await fetch(base + "/system_stats", { cache: "no-store" });
+    if (!r.ok) throw 0;
+    const j = await r.json();
+    const devs = j.devices || [];
+    const dev = devs.find(d => ["cuda", "xpu", "mps", "rocm"].includes(d.type)) || devs[0];
+    if (!dev || !dev.vram_total) throw 0;
+    // No utilization over /system_stats — only VRAM. Pass util=null.
+    applyGpu(null, (dev.vram_total - dev.vram_free) / dev.vram_total, { vram_used: dev.vram_total - dev.vram_free, vram_total: dev.vram_total });
+  } catch (_) {
+    $("gpuMon").classList.add("stale");
+    $("gpuUtilPct").textContent = "n/a"; $("gpuVramPct").textContent = "n/a";
+  }
+}
+
+function applyGpu(util, vram, x) {
+  const clamp01 = v => Math.max(0, Math.min(1, v || 0));
+  const gb = b => (b / 1073741824).toFixed(1);
+  x = x || {};
+  $("gpuMon").classList.remove("stale");
+  if (util != null) { util = clamp01(util); utilHist.push(util); if (utilHist.length > GPU_SAMPLES) utilHist.shift(); $("gpuUtilPct").textContent = Math.round(util * 100) + "%"; }
+  else { $("gpuUtilPct").textContent = "n/a"; }
+  if (vram != null) { vram = clamp01(vram); vramHist.push(vram); if (vramHist.length > GPU_SAMPLES) vramHist.shift(); $("gpuVramPct").textContent = Math.round(vram * 100) + "%"; }
+  else { $("gpuVramPct").textContent = "n/a"; }
+  const parts = [];
+  if (util != null) parts.push("GPU " + Math.round(util * 100) + "%");
+  if (x.vram_used != null && x.vram_total) parts.push("VRAM " + gb(x.vram_used) + "/" + gb(x.vram_total) + " GB");
+  else if (vram != null) parts.push("VRAM " + Math.round(vram * 100) + "%");
+  if (x.temp != null) parts.push(Math.round(x.temp) + "°C");
+  if (util == null) parts.push("(utilization needs Crystools)");
+  $("gpuMon").title = parts.join(" · ") || "ComfyUI GPU";
+  drawSpark($("gpuUtilSpark"), utilHist, "#6366f1");
+  drawSpark($("gpuVramSpark"), vramHist, "#22b8cf");
+}
+
+function drawSpark(cv, hist, color) {
+  if (!cv) return;
+  if (!cv._init) {
+    const dpr = window.devicePixelRatio || 1;
+    cv._w = cv.width; cv._h = cv.height;
+    cv.style.width = cv._w + "px"; cv.style.height = cv._h + "px";
+    cv.width = Math.round(cv._w * dpr); cv.height = Math.round(cv._h * dpr);
+    cv.getContext("2d").scale(dpr, dpr);
+    cv._init = true;
+  }
+  const ctx = cv.getContext("2d"), W = cv._w, H = cv._h, n = hist.length;
+  ctx.clearRect(0, 0, W, H);
+  if (!n) return;
+  const step = W / (GPU_SAMPLES - 1), x0 = W - (n - 1) * step;
+  const yOf = v => H - 1 - v * (H - 2);
+  ctx.beginPath(); ctx.moveTo(x0, H);
+  for (let i = 0; i < n; i++) ctx.lineTo(x0 + i * step, yOf(hist[i]));
+  ctx.lineTo(x0 + (n - 1) * step, H); ctx.closePath();
+  ctx.fillStyle = color + "30"; ctx.fill();
+  ctx.beginPath();
+  for (let i = 0; i < n; i++) { const x = x0 + i * step, y = yOf(hist[i]); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); }
+  ctx.strokeStyle = color; ctx.lineWidth = 1.5; ctx.stroke();
+}
+document.addEventListener("visibilitychange", syncGpuMonitor);
 
 // Shape the layout-preview canvas to match the selected output aspect ratio.
 // Coordinates stay normalized 0-1000 per axis; only the canvas box reshapes.
