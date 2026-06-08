@@ -2,6 +2,9 @@
 comfy_proxy.pid
 comfy_proxy.log
 
+# local untracked config (real ComfyUI IP, etc.)
+comfy_proxy.env
+
 # python venv for proxy vectorizer deps
 .venv/
 

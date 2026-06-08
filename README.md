@@ -157,6 +157,16 @@ Override defaults with environment variables:
 COMFY_URL=http://0.0.0.0:8188 PROXY_HOST=0.0.0.0 PROXY_PORT=8189 ./comfy_proxy.sh start
 ```
 
+**Local config file (recommended).** Instead of typing the variables each time, copy `comfy_proxy.env.example` to `comfy_proxy.env` and set your real ComfyUI address there. Both `comfy_proxy.sh` and `comfy_proxy.py` load it automatically (a pre-set environment variable still wins), and it's **gitignored** so your server IP never lands in the repo:
+
+```bash
+cp comfy_proxy.env.example comfy_proxy.env
+# edit comfy_proxy.env -> COMFY_URL=http://<your-comfyui-host>:8188
+./comfy_proxy.sh start
+```
+
+Override the path with `COMFY_PROXY_ENV=/path/to/file`.
+
 Or run the Python directly (same effect, no PID/log management):
 
 ```bash

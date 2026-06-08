@@ -705,13 +705,33 @@ def vectorize_image(img_bytes, elements, options):
     return "".join(parts), stats
 
 
+def _load_env_file(path):
+    """Load simple KEY=VALUE lines from an untracked env file into os.environ
+    (without overriding variables already set in the environment). Keeps the
+    real ComfyUI address out of the tracked code."""
+    try:
+        with open(path, "r", encoding="utf-8") as fh:
+            for line in fh:
+                line = line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                key, val = line.split("=", 1)
+                key = key.strip()
+                val = val.strip().strip('"').strip("'")
+                if key and key not in os.environ:
+                    os.environ[key] = val
+    except OSError:
+        pass
+
+
 def main():
     global ARGS
     here = os.path.dirname(os.path.abspath(__file__))
+    _load_env_file(os.environ.get("COMFY_PROXY_ENV", os.path.join(here, "comfy_proxy.env")))
     p = argparse.ArgumentParser(description="Local same-origin proxy for the Ideogrammar editor -> ComfyUI")
-    p.add_argument("--comfy", default="http://127.0.0.1:8188", help="ComfyUI base URL")
-    p.add_argument("--host", default="127.0.0.1", help="address to bind (use 0.0.0.0 to expose on LAN)")
-    p.add_argument("--port", type=int, default=8189, help="port to serve on")
+    p.add_argument("--comfy", default=os.environ.get("COMFY_URL", "http://127.0.0.1:8188"), help="ComfyUI base URL (env: COMFY_URL)")
+    p.add_argument("--host", default=os.environ.get("PROXY_HOST", "127.0.0.1"), help="address to bind (use 0.0.0.0 to expose on LAN; env: PROXY_HOST)")
+    p.add_argument("--port", type=int, default=int(os.environ.get("PROXY_PORT", "8189")), help="port to serve on (env: PROXY_PORT)")
     p.add_argument("--html", default=os.path.join(here, "index.html"), help="path to index.html")
     p.add_argument("--output-dir", default="", help="ComfyUI output/ folder (readable by this proxy) — enables gallery recovery via the editor's Rescan button, surviving ComfyUI restarts")
     p.add_argument("--timeout", type=float, default=600.0, help="upstream timeout (s)")

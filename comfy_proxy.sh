@@ -21,6 +21,16 @@ DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PIDFILE="$DIR/comfy_proxy.pid"
 LOGFILE="$DIR/comfy_proxy.log"
 
+# Load local, untracked overrides (real ComfyUI IP, etc.) so they stay out of
+# the tracked code. Pre-set environment variables still win.
+ENV_FILE="${COMFY_PROXY_ENV:-$DIR/comfy_proxy.env}"
+if [ -f "$ENV_FILE" ]; then
+  set -a
+  # shellcheck disable=SC1090
+  . "$ENV_FILE"
+  set +a
+fi
+
 COMFY_URL="${COMFY_URL:-http://127.0.0.1:8188}"
 PROXY_HOST="${PROXY_HOST:-0.0.0.0}"
 PROXY_PORT="${PROXY_PORT:-8189}"
