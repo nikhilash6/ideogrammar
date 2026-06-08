@@ -1398,16 +1398,7 @@ async function runGeneration() {
   };
 
   try {
-    const res = await fetch(cfg.baseUrl + "/chat/completions", { method: "POST", headers, body: JSON.stringify(body) });
-    if (!res.ok) {
-      let detail = "";
-      try { const j = await res.json(); detail = j.error?.message || JSON.stringify(j.error || j); }
-      catch (_) { detail = await res.text().catch(() => ""); }
-      throw new Error(`HTTP ${res.status} ${res.statusText}${detail ? " — " + detail : ""}`);
-    }
-    const data = await res.json();
-    const content = data.choices?.[0]?.message?.content;
-    if (!content) throw new Error("Empty response from model.");
+    const content = await chatCompletion(cfg, headers, body);
     const parsed = extractJSON(content);
     if (!parsed) throw new Error("Could not parse JSON from the model's reply.");
     loadFromJSON(parsed);
@@ -1422,6 +1413,32 @@ async function runGeneration() {
     generating = false;
     $("genRun").disabled = false;
   }
+}
+
+// POST to /chat/completions and return the message content. Some OpenAI-compatible
+// servers (e.g. LM Studio) reject response_format:{type:"json_object"} with a 400;
+// in that case retry once without it (extractJSON still parses the text reply).
+async function chatCompletion(cfg, headers, body) {
+  const send = b => fetch(cfg.baseUrl + "/chat/completions", { method: "POST", headers, body: JSON.stringify(b) });
+  const errDetail = async res => {
+    try { const j = await res.json(); return j.error?.message || JSON.stringify(j.error || j); }
+    catch (_) { return await res.text().catch(() => ""); }
+  };
+  let res = await send(body);
+  if (!res.ok) {
+    const detail = await errDetail(res);
+    if (res.status === 400 && body.response_format && /response_format/i.test(detail)) {
+      const retry = { ...body }; delete retry.response_format;
+      res = await send(retry);
+      if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText} — ${await errDetail(res)}`);
+    } else {
+      throw new Error(`HTTP ${res.status} ${res.statusText}${detail ? " — " + detail : ""}`);
+    }
+  }
+  const data = await res.json();
+  const content = data.choices?.[0]?.message?.content;
+  if (!content) throw new Error("Empty response from model.");
+  return content;
 }
 
 function extractJSON(text) {
@@ -1496,16 +1513,7 @@ async function runRefine() {
   };
 
   try {
-    const res = await fetch(cfg.baseUrl + "/chat/completions", { method: "POST", headers, body: JSON.stringify(body) });
-    if (!res.ok) {
-      let detail = "";
-      try { const j = await res.json(); detail = j.error?.message || JSON.stringify(j.error || j); }
-      catch (_) { detail = await res.text().catch(() => ""); }
-      throw new Error(`HTTP ${res.status} ${res.statusText}${detail ? " — " + detail : ""}`);
-    }
-    const data = await res.json();
-    const content = data.choices?.[0]?.message?.content;
-    if (!content) throw new Error("Empty response from model.");
+    const content = await chatCompletion(cfg, headers, body);
     const parsed = extractJSON(content);
     if (!parsed) throw new Error("Could not parse JSON from the model's reply.");
     const prevVec = state.elements.map(e => e.vectorize || "auto");

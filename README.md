@@ -63,6 +63,9 @@ Configure a provider in **⚙ Settings** (OpenAI-compatible):
 
 - **OpenRouter** — base URL `https://openrouter.ai/api/v1`, your API key, a model like `anthropic/claude-3.5-sonnet`.
 - **Local llama.cpp** — run `llama-server` with CORS enabled; base URL `http://<host>:8081/v1`.
+- **LM Studio** — start its local server (Developer tab → *Start Server*); base URL `http://<host>:1234/v1` (the default port is **1234**, not 8081), no API key. Pick the loaded model's name as the model.
+
+Any other OpenAI-compatible endpoint works too — just set the base URL to the one ending in `/v1`. The app asks for a strict JSON response (`response_format: json_object`); servers that don't support that flag (e.g. LM Studio) are detected automatically and the request is retried without it, so it still works.
 
 Then click **✨ Generate prompt**, describe the image, and the model returns the full schema, which you can edit visually. Settings/presets are saved in your browser only.
 
