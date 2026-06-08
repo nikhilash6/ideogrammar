@@ -2057,6 +2057,37 @@ function buildWorkflow() {
   return wf;
 }
 
+// Cache /object_info per server so we can reconcile the embedded template with
+// whatever node versions the installed ComfyUI actually has.
+let objectInfoCache = { base: null, info: null };
+async function getObjectInfo(base) {
+  if (objectInfoCache.base === base && objectInfoCache.info) return objectInfoCache.info;
+  try {
+    const r = await fetch(base + "/object_info", { cache: "no-store" });
+    if (r.ok) objectInfoCache = { base, info: await r.json() };
+  } catch (_) {}
+  return objectInfoCache.base === base ? objectInfoCache.info : null;
+}
+
+// Future-proofing: if a ComfyUI update adds a new REQUIRED input to a node we
+// use (e.g. ResolutionSelector's "multiple"), our embedded template won't have
+// it and the prompt is rejected. Fill any missing required scalar input from the
+// node's own declared default. Never overrides inputs we already set, and never
+// touches link inputs (those have no default and are already wired up).
+function fillMissingRequiredInputs(wf, info) {
+  if (!info) return;
+  for (const node of Object.values(wf)) {
+    const req = info[node.class_type]?.input?.required;
+    if (!req) continue;
+    for (const key of Object.keys(req)) {
+      if (key in node.inputs) continue;
+      const spec = req[key], opts = Array.isArray(spec) ? spec[1] : null;
+      if (opts && Object.prototype.hasOwnProperty.call(opts, "default")) node.inputs[key] = opts.default;
+      else if (Array.isArray(spec) && Array.isArray(spec[0]) && spec[0].length) node.inputs[key] = spec[0][0]; // COMBO: first option
+    }
+  }
+}
+
 let rendering = false;
 let lastRenderSetup = null;
 let lastRenderImage = null;   // {filename,subfolder,type,rotation,aspect} of the most recent render
@@ -2101,7 +2132,9 @@ async function comfyRender() {
 
   let promptId;
   try {
-    const res = await fetch(base + "/prompt", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prompt: buildWorkflow(), client_id: getClientId() }) });
+    const wf = buildWorkflow();
+    fillMissingRequiredInputs(wf, await getObjectInfo(base));   // reconcile with the installed ComfyUI's node defs
+    const res = await fetch(base + "/prompt", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prompt: wf, client_id: getClientId() }) });
     if (!res.ok) {
       let detail = "";
       try {
