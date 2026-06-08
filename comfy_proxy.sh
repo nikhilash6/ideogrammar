@@ -11,7 +11,7 @@
 #   ./comfy_proxy.sh logs       # tail the log
 #
 # Override defaults via environment variables:
-#   COMFY_URL=http://192.168.2.33:8188   # ComfyUI server
+#   COMFY_URL=http://127.0.0.1:8188   # ComfyUI server
 #   PROXY_HOST=0.0.0.0                    # 0.0.0.0 = reachable from the LAN
 #   PROXY_PORT=8189                       # port the editor is served on
 #   PYTHON=python3
@@ -21,7 +21,7 @@ DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PIDFILE="$DIR/comfy_proxy.pid"
 LOGFILE="$DIR/comfy_proxy.log"
 
-COMFY_URL="${COMFY_URL:-http://192.168.2.33:8188}"
+COMFY_URL="${COMFY_URL:-http://127.0.0.1:8188}"
 PROXY_HOST="${PROXY_HOST:-0.0.0.0}"
 PROXY_PORT="${PROXY_PORT:-8189}"
 PYTHON="${PYTHON:-python3}"

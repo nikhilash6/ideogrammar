@@ -394,7 +394,7 @@
         <label class="toggle" style="margin-top:2px;"><input type="checkbox" id="cf-direct"> Connect directly to ComfyUI <span style="color:var(--faint)">(only if it runs with --enable-cors-header)</span></label>
         <div id="cf-urlRow" style="display:none;">
           <label>ComfyUI URL</label>
-          <input type="text" id="cf-url" placeholder="http://192.168.2.33:8188" autocomplete="off">
+          <input type="text" id="cf-url" placeholder="http://127.0.0.1:8188" autocomplete="off">
         </div>
         <div class="hint" id="cf-target" style="margin-top:6px;"></div>
         <div class="row2">
@@ -507,7 +507,7 @@
           <button class="primary" id="renderBtn2" style="flex:1;">🎨 Render</button>
         </div>
         <div class="render-row" style="margin-top:8px;"><span class="status" id="cf-testStatus"></span></div>
-        <div class="hint">Renders the current prompt on your ComfyUI server using the bundled Ideogram 4 workflow; the result shows in the middle panel.<br><br><b>Recommended:</b> run <code>comfy_proxy.py</code> on a host that can reach ComfyUI and open this editor from the address it prints (e.g. <code>http://192.168.2.35:8189/</code>). Leave "Connect directly" unchecked — the proxy forwards everything, so there's no CORS. Only tick "Connect directly" if ComfyUI itself runs with <code>--enable-cors-header</code>.</div>
+        <div class="hint">Renders the current prompt on your ComfyUI server using the bundled Ideogram 4 workflow; the result shows in the middle panel.<br><br><b>Recommended:</b> run <code>comfy_proxy.py</code> on a host that can reach ComfyUI and open this editor from the address it prints (e.g. <code>http://<lan-ip>:8189/</code>). Leave "Connect directly" unchecked — the proxy forwards everything, so there's no CORS. Only tick "Connect directly" if ComfyUI itself runs with <code>--enable-cors-header</code>.</div>
       </div>
     </section>
       </div>
@@ -1638,7 +1638,7 @@ const COMFY_KEY = "ideogram_comfy_cfg";
 function defaultComfyCfg() {
   return {
     mode: "manual",
-    url: "http://192.168.2.33:8188",
+    url: "http://127.0.0.1:8188",
     _defaultsV: 2,
     direct: false, save: false, workflow: "v2",
     aspect_ratio: "1:1 (Square)", megapixels: 2,
@@ -2501,7 +2501,7 @@ function updateComfyTarget() {
   if (!direct) {
     if (location.protocol === "file:") {
       el.style.color = "var(--danger)";
-      el.innerHTML = "⚠ This is a local <code>file://</code> page. Run <code>comfy_proxy.py</code> on the host and open the address it prints (e.g. <code>http://192.168.2.35:8189/</code>) — don't open the file directly.";
+      el.innerHTML = "⚠ This is a local <code>file://</code> page. Run <code>comfy_proxy.py</code> on the host and open the address it prints (e.g. <code>http://<lan-ip>:8189/</code>) — don't open the file directly.";
       return;
     }
     el.style.color = "var(--success)";

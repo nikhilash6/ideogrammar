@@ -149,23 +149,23 @@ Use the start/stop helper on a host that can reach ComfyUI:
 ./comfy_proxy.sh logs       # tail the log
 ```
 
-It prints the address to open, e.g. `http://192.168.2.35:8189/`. Open **that** address in your browser (from any machine on the LAN), switch to **ComfyUI** mode, and leave **"Connect directly to ComfyUI" unchecked**. The green line under it confirms renders go to the proxy. The proxy forwards all API calls + the `/ws` progress WebSocket, so there's no CORS.
+It prints the address to open, e.g. `http://<lan-ip>:8189/`. Open **that** address in your browser (from any machine on the LAN), switch to **ComfyUI** mode, and leave **"Connect directly to ComfyUI" unchecked**. The green line under it confirms renders go to the proxy. The proxy forwards all API calls + the `/ws` progress WebSocket, so there's no CORS.
 
 Override defaults with environment variables:
 
 ```bash
-COMFY_URL=http://192.168.2.33:8188 PROXY_HOST=0.0.0.0 PROXY_PORT=8189 ./comfy_proxy.sh start
+COMFY_URL=http://0.0.0.0:8188 PROXY_HOST=0.0.0.0 PROXY_PORT=8189 ./comfy_proxy.sh start
 ```
 
 Or run the Python directly (same effect, no PID/log management):
 
 ```bash
-python comfy_proxy.py --comfy http://192.168.2.33:8188 --host 0.0.0.0 --port 8189
+python comfy_proxy.py --comfy http://0.0.0.0:8188 --host 0.0.0.0 --port 8189
 ```
 
 | Flag | Default | Purpose |
 |------|---------|---------|
-| `--comfy URL` | `http://192.168.2.33:8188` | ComfyUI base URL |
+| `--comfy URL` | `http://127.0.0.1:8188` | ComfyUI base URL |
 | `--host ADDR` | `127.0.0.1` | bind address (`0.0.0.0` to expose on LAN) |
 | `--port N` | `8189` | port to serve on |
 | `--html PATH` | `./index.html` | page to serve |
@@ -197,7 +197,7 @@ journalctl --user -u comfy_proxy.service -f      # live logs
 Set host/port/target at install time with the same env vars:
 
 ```bash
-COMFY_URL=http://192.168.2.33:8188 PROXY_HOST=0.0.0.0 PROXY_PORT=8189 ./comfy_proxy.sh install-service
+COMFY_URL=http://127.0.0.1:8188 PROXY_HOST=0.0.0.0 PROXY_PORT=8189 ./comfy_proxy.sh install-service
 ```
 
 For a **system-wide** service instead (starts at boot regardless of any login; uses sudo):
@@ -213,7 +213,7 @@ SERVICE_SCOPE=system ./comfy_proxy.sh install-service
 python main.py --listen --enable-cors-header
 ```
 
-Then in the editor, tick **"Connect directly to ComfyUI"** and enter its URL (e.g. `http://192.168.2.33:8188`). No proxy needed in this mode.
+Then in the editor, tick **"Connect directly to ComfyUI"** and enter its URL (e.g. `http://127.0.0.1:8188`). No proxy needed in this mode.
 
 ### Test connection
 

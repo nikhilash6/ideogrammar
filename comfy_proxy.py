@@ -19,7 +19,7 @@ What it does:
 
 Usage:
   python comfy_proxy.py
-  python comfy_proxy.py --comfy http://192.168.2.33:8188 --port 8189
+  python comfy_proxy.py --comfy http://127.0.0.1:8188 --port 8189
   # then open http://localhost:8189/ and set the editor's Server URL to
   #   http://localhost:8189   (or leave blank when served from here)
 
@@ -709,7 +709,7 @@ def main():
     global ARGS
     here = os.path.dirname(os.path.abspath(__file__))
     p = argparse.ArgumentParser(description="Local same-origin proxy for the Ideogrammar editor -> ComfyUI")
-    p.add_argument("--comfy", default="http://192.168.2.33:8188", help="ComfyUI base URL")
+    p.add_argument("--comfy", default="http://127.0.0.1:8188", help="ComfyUI base URL")
     p.add_argument("--host", default="127.0.0.1", help="address to bind (use 0.0.0.0 to expose on LAN)")
     p.add_argument("--port", type=int, default=8189, help="port to serve on")
     p.add_argument("--html", default=os.path.join(here, "index.html"), help="path to index.html")
