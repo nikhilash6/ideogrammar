@@ -2046,6 +2046,7 @@ function buildWorkflow() {
 
 let rendering = false;
 let lastRenderSetup = null;
+let lastRenderImage = null;   // {filename,subfolder,type,rotation,aspect} of the most recent render
 let renderWS = null;
 let renderPromptId = null;   // id of the prompt currently on ComfyUI
 let renderStop = null;       // set by trackRender; halts ws/polling without finishing
@@ -2165,6 +2166,9 @@ async function showResult(base, promptId) {
   for (const nodeId of Object.keys(outputs)) { const o = outputs[nodeId]; if (o.images && o.images.length) { img = o.images[o.images.length - 1]; break; } }
   if (!img) throw new Error("Render finished but produced no image.");
   const entry = { filename: img.filename, subfolder: img.subfolder || "", type: img.type || "output", seed: comfyCfg.seed, aspect: comfyCfg.aspect_ratio, ts: Date.now(), time: new Date().toLocaleTimeString(), rotation: 0, setup: lastRenderSetup, elements: state.elements.map(e => ({ type: e.type, bbox: e.bbox.slice() })) };
+  // Remember the produced image so a saved setup can show it again later.
+  lastRenderImage = { filename: entry.filename, subfolder: entry.subfolder, type: entry.type, rotation: 0, aspect: entry.aspect };
+  if (entry.setup) entry.setup.render = lastRenderImage;
   const el = $("renderImg");
   el.onload = () => { el.style.display = "block"; $("renderPlaceholder").style.display = "none"; };
   el.onerror = () => setRenderStatus("Image rendered but could not be loaded from " + comfyBase() + "/view", "err");
@@ -2501,8 +2505,46 @@ function captureSetup() {
     style_description: JSON.parse(JSON.stringify(state.style_description)),
     background: state.background,
     elements: state.elements.map(e => ({ type: e.type, bbox: e.bbox.slice(), desc: e.desc, color_palette: e.color_palette.slice(), vectorize: e.vectorize || "auto" })),
-    comfy
+    comfy,
+    render: lastRenderImage ? { ...lastRenderImage } : null
   };
+}
+
+// A signature that ties a setup to the render it produced (prompt content).
+function setupKey(s) {
+  if (!s) return "";
+  return (s.high_level_description || "") + "||" + (Array.isArray(s.elements) ? s.elements.map(e => (e.type || "") + ":" + (e.desc || "")).join("~") : "");
+}
+
+// Resolve the render image for a setup: its own stored reference if present,
+// otherwise the most recent gallery render whose setup matches (so setups saved
+// before the image was tracked still show their render).
+function findRenderForSetup(s) {
+  if (s && s.render && s.render.filename) return s.render;
+  if (!s) return null;
+  const key = setupKey(s);
+  for (let i = renderHistory.length - 1; i >= 0; i--) {
+    const it = renderHistory[i];
+    if (it && it.filename && it.setup && setupKey(it.setup) === key) {
+      return { filename: it.filename, subfolder: it.subfolder || "", type: it.type || "output", rotation: it.rotation || 0, aspect: it.aspect };
+    }
+  }
+  return null;
+}
+
+// Show a stored render reference in the main preview window (used when loading
+// a setup). Clears to the placeholder when there's no image to show.
+function showRenderInPreview(ref) {
+  const el = $("renderImg");
+  if (!ref || !ref.filename || !comfyBase()) {
+    el.style.display = "none"; el.removeAttribute("src");
+    $("renderPlaceholder").style.display = "";
+    return;
+  }
+  el.onload = () => { el.style.display = "block"; $("renderPlaceholder").style.display = "none"; };
+  el.onerror = () => { el.style.display = "none"; $("renderPlaceholder").style.display = ""; };
+  if (ref.rotation) bakeRotated(viewUrl(ref), ref.rotation).then(u => { el.src = u; }).catch(() => { el.src = viewUrl(ref); });
+  else el.src = viewUrl(ref);
 }
 function applySetup(s) {
   if (!s) return;
@@ -2526,6 +2568,7 @@ function applySetup(s) {
   applyComfyForm();
   applyCanvasAspect();
   render();
+  showRenderInPreview(findRenderForSetup(s));
   toast("Setup loaded ✓", "ok");
 }
 function saveCurrentSetup() {
