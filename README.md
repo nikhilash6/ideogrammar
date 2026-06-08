@@ -14,7 +14,8 @@ Everything lives in [`index.html`](index.html) (HTML + CSS + vanilla JS, no depe
 - **Live JSON output** — syntax-highlighted, copy or download with one click.
 - **Generate prompt** — describe the image in plain language, **or upload/drop a reference image** (with a vision-capable model), and an OpenAI-compatible LLM (OpenRouter or a local `llama.cpp` server) fills in the whole schema. Settings are stored in `localStorage`.
 - **Refine** — ask the LLM to adjust the current setup with a plain-language change (e.g. "make it a lighter composition"); it rewrites the whole setup while keeping everything the request doesn't touch.
-- **ComfyUI mode** — render the current prompt on your ComfyUI server using the bundled Ideogram 4 workflow, with every workflow parameter exposed and the result (plus live progress) shown in the editor. Renders collect in a gallery with a full-size viewer, and can be saved permanently.
+- **ComfyUI mode** — render the current prompt on your ComfyUI server using the bundled Ideogram 4 workflow, with every workflow parameter exposed and the result (plus live progress) shown in the editor. A **✕ Cancel** button interrupts a render in progress. Renders collect in a gallery with a full-size viewer, and can be saved permanently.
+- **GPU monitor** — live GPU-utilization and VRAM graphs in the top bar (ComfyUI mode), fed by the [Crystools](https://github.com/crystian/ComfyUI-Crystools) websocket; falls back to a VRAM-only graph if Crystools isn't installed.
 - **Import / Reset / Download** — round-trip the prompt JSON.
 
 ## Quick start
@@ -73,13 +74,13 @@ Click **🪄 Refine** to adjust the *current* setup with a natural-language chan
 
 ## Setups & library
 
-A **setup** is the whole prompt builder state (description, style, background, positioned elements with per-element vectorize modes) plus the render parameters. Save the current one from **⚙ Settings → Setups & library**, and reload it anytime. Every render also captures its setup: open it in the viewer and press **⤵ Load setup** to restore exactly the prompt + settings that produced it. Stored in `localStorage`.
+A **setup** is the whole prompt builder state (description, style, background, positioned elements with per-element vectorize modes) plus the render parameters. Save the current one from **⚙ Settings → Setups & library**, and reload it anytime. Loading a setup also restores its **rendered image** in the preview window (the render it produced, if still available on the server; older setups fall back to matching a render in the gallery). Every render also captures its setup: open it in the viewer and press **⤵ Load setup** to restore exactly the prompt + settings that produced it. Stored in `localStorage`.
 
 ## ComfyUI mode
 
-ComfyUI mode renders the current prompt on your server with the bundled Ideogram 4 workflow ([`workflow.json`](workflow.json), embedded in the page). The left panel exposes every meaningful parameter — connection (proxy vs. direct), scheduler workflow, aspect ratio, megapixels, quality preset (Quality/Default/Turbo), seed (+ randomize), guidance CFG, sampler, CFG-override, batch size, and the diffusion / unconditional / VAE / CLIP model names. The **scheduler workflow** selector switches between the stock *Ideogram 4 default* (`Ideogram4Scheduler`) and a community *simple scheduler* variant (`ModelSamplingAuraFlow` shift + `BasicScheduler` "simple" + euler), which some find gives better results; switching also sets the matching recommended sampler. The editor's prompt JSON is injected into the positive-prompt node on every render. Results and live progress appear in the middle panel. A **Test connection** button reports whether the server is reachable (and its version) or what's wrong.
+ComfyUI mode renders the current prompt on your server with the bundled Ideogram 4 workflow ([`workflow.json`](workflow.json), embedded in the page). The left panel exposes every meaningful parameter — connection (proxy vs. direct), scheduler workflow, aspect ratio, megapixels, quality preset (Quality/Default/Turbo), seed (+ randomize), guidance CFG, sampler, CFG-override, batch size, and the diffusion / unconditional / VAE / CLIP model names. The **scheduler workflow** selector switches between the stock *Ideogram 4 default* (`Ideogram4Scheduler`) and a community *simple scheduler* variant (`ModelSamplingAuraFlow` shift + `BasicScheduler` "simple" + euler), which some find gives better results; switching also sets the matching recommended sampler. The editor's prompt JSON is injected into the positive-prompt node on every render. Results and live progress appear in the middle panel, and **✕ Cancel** interrupts a running render (it calls ComfyUI's `/interrupt` and drops the job from the queue). A **Test connection** button reports whether the server is reachable (and its version) or what's wrong.
 
-The middle panel also reshapes to the selected **aspect ratio** so the layout preview matches the real canvas (coordinates stay normalized `0–1000` per axis).
+The middle panel also reshapes to the selected **aspect ratio** so the layout preview matches the real canvas. You lay boxes out in the editor's normalized `0–1000` space, but when a render is sent the prompt's bounding boxes are scaled into the **actual output pixel dimensions** and the text is prefixed with an explicit **orientation cue** (e.g. *"LANDSCAPE … 1776×1184 … do not rotate or mirror"*). This keeps the model's frame, the latent size, and the layout coordinates consistent — without it the model tends to squash the layout or rotate the result ~90°.
 
 **Vectorize to SVG (local, experimental).** The **⬡ Vectorize → SVG** button (in the Rendered output tile, and in the full-image viewer for any gallery item) converts a render to a *hybrid* SVG: flat regions (text, logos, and `obj` regions that pass a flatness heuristic) are traced to vector paths with [VTracer](https://github.com/visioncortex/vtracer); photographic regions (`subject`, `bg`) stay as an embedded raster base. Routing uses the element types from the prompt plus a per-region reconstruction-error test. Each vector overlay is **clipped to the element's actual shape** (so vector text sits over the photo as glyphs, not as a rectangle) using a mask — **SAM if you've configured it**, otherwise a built-in foreground heuristic. The result opens in the viewer with a download link.
 
@@ -132,6 +133,18 @@ If SAM fails to load it silently falls back to the heuristic, so the feature nev
 **Gallery & saving.** Every render is added to a **History** strip below the result; click the result image or any thumbnail to open a full-size **viewer modal** with prev/next (arrow keys), **rotate 90° CW/CCW** (saved per item; applied to the view, the download, the gallery thumbnail, and vectorize), seed/aspect info, and a download link. The strip is scrollable and has a **↓ Newest / ↑ Oldest** toggle that sorts by creation date. By default renders are ComfyUI **temp** files, so the gallery is session-only. Tick **Save renders permanently** to switch the output node to `SaveImage` (files land in ComfyUI's `output/` as `ideogrammar_*.png`); those renders persist in the gallery across reloads (stored in `localStorage`, up to 300). **Clear** empties the gallery list only — it never deletes files from `output/`.
 
 **Recovering renders (⟳ Rescan).** If the gallery list gets out of sync with what's actually on disk (e.g. it was trimmed, cleared, or opened in another browser), **⟳ Rescan** in the History header rebuilds it. It merges two sources, deduped by filename: (1) **ComfyUI's `/history`** — every render the running ComfyUI still remembers, including seed, aspect and the full setup (from the prompt graph); and (2) a **disk scan** of ComfyUI's `output/` folder via the proxy, which survives a ComfyUI restart. The disk scan reads seed/aspect/setup back out of each PNG's embedded `prompt` metadata and orders by file mtime. It only runs when the proxy is started with `--output-dir` pointing at a readable `output/` folder (see below); without it, Rescan falls back to `/history` alone.
+
+### GPU monitor
+
+In ComfyUI mode the top bar shows two live sparklines — **GPU** (compute utilization) and **VRAM** (memory used) — so you can watch the card while it renders. The data comes from the [**Crystools**](https://github.com/crystian/ComfyUI-Crystools) extension, which broadcasts a `crystools.monitor` message (utilization, temperature, VRAM) over ComfyUI's websocket about once a second. Install it on your ComfyUI server (via ComfyUI-Manager, or clone it into `ComfyUI/custom_nodes/` and restart):
+
+```bash
+cd ComfyUI/custom_nodes
+git clone https://github.com/crystian/ComfyUI-Crystools.git
+# then restart ComfyUI
+```
+
+Crystools is **optional**: without it, the GPU graph shows `n/a` and the VRAM graph still works (polled from ComfyUI's built-in `/system_stats`, which reports memory but not utilization). The monitor polls only while you're in ComfyUI mode and the tab is visible.
 
 ### The CORS problem (and why the proxy exists)
 
@@ -238,6 +251,7 @@ The **Test connection** button in the ComfyUI panel pings `/system_stats` and re
 | [`index.html`](index.html) | The entire app — editor, canvas, LLM generation, ComfyUI mode. |
 | [`comfy_proxy.py`](comfy_proxy.py) | Stdlib proxy: serves the page + local asset files (e.g. `vendor/`), forwards HTTP and the WebSocket to ComfyUI (same-origin, no CORS flags), and hosts the `/vectorize` endpoint (optional `vtracer`/`pillow` deps) plus `/ideogrammar/outputs` (gallery recovery; needs `--output-dir`). |
 | [`comfy_proxy.sh`](comfy_proxy.sh) | start/stop/status/restart/logs helper, plus `install-service`/`uninstall-service` to run it as a background systemd service. |
+| [`comfy_proxy.env.example`](comfy_proxy.env.example) | Template for `comfy_proxy.env` (untracked) — set your ComfyUI address/host/port there instead of in the tracked code. |
 | [`workflow.json`](workflow.json) | The Ideogram 4 ComfyUI workflow (API format) the render mode is built around; also embedded in `index.html`. |
 | [`vendor/`](vendor/) | Bundled third-party assets (GridStack JS/CSS) served locally by the proxy, so the tiled layout works without a CDN. |
 
