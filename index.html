@@ -135,6 +135,8 @@
   button.primary:hover { background: linear-gradient(135deg, var(--accent-hover), #6d4ce6); }
   button.ghost { background: transparent; border-color: var(--border); }
   button:disabled { opacity: .5; cursor: not-allowed; transform: none; }
+  /* gear/symbol glyphs render tiny ("dot"-like) at body size; bump them in buttons */
+  .bico { font-size: 1.35em; line-height: 1; vertical-align: -0.09em; }
   .btn-row { display: flex; gap: 8px; flex-wrap: wrap; }
   .iconbtn {
     width: 28px; height: 28px; padding: 0; display: grid; place-items: center;
@@ -293,6 +295,9 @@
   /* ---------- gridstack tiled windows ---------- */
   .grid-stack { flex: 1; min-height: 0; overflow: auto; padding: 4px; }
   .grid-stack-item-content { overflow: hidden; inset: 0; }
+  /* GridStack injects a per-grid stylesheet (.gs-id-N) that sets the content
+     inset to the 5px margin; out-specify it (extra `body`) so top wins. */
+  body .grid-stack > .grid-stack-item > .grid-stack-item-content { top: 10px; }
   .tile { display: flex; flex-direction: column; height: 100%;
     background: linear-gradient(180deg, var(--panel), var(--panel-2));
     border: 1px solid var(--border); border-radius: var(--r); overflow: hidden; }
@@ -342,7 +347,7 @@
     <button id="resetBtn">Reset</button>
     <button id="copyBtn">Copy JSON</button>
     <button id="downloadBtn">Download</button>
-    <button id="settingsBtn" title="Settings">⚙ Settings</button>
+    <button id="settingsBtn" title="Settings"><span class="bico">⚙</span> Settings</button>
     <select id="layoutPreset" title="Tiling preset" style="width:auto; padding:7px 10px;">
       <option value="sidebar">▤ Sidebar + split</option>
       <option value="columns">▥ Three columns</option>
@@ -560,7 +565,7 @@
       </div>
       <div class="progress"><div id="renderBar"></div></div>
       <div class="render-row" style="display:flex; align-items:center; gap:8px;"><span class="status" id="renderStatus" style="flex:1;"></span><button id="renderCancel" title="Stop the current render on ComfyUI" style="display:none; padding:6px 12px;">✕ Cancel</button></div>
-      <div class="render-row"><button id="vectorizeBtn" title="Trace flat regions (text/logos/flat art) to vector, keep photographic parts as raster">⬡ Vectorize → SVG</button><button id="vecSettingsBtn" title="Vectorizer settings" style="padding:7px 10px;">⚙</button><span class="status" id="vectorizeStatus" style="flex:1;"></span></div>
+      <div class="render-row"><button id="vectorizeBtn" title="Trace flat regions (text/logos/flat art) to vector, keep photographic parts as raster">⬡ Vectorize → SVG</button><button id="vecSettingsBtn" title="Vectorizer settings" style="padding:6px 10px;"><span class="bico">⚙</span></button><span class="status" id="vectorizeStatus" style="flex:1;"></span></div>
       <div id="galleryRow" style="display:none; flex-direction:column; align-items:stretch; gap:6px; width:100%;">
         <div class="col-title" style="margin:6px 0 0; display:flex; align-items:center; gap:8px;">History <span id="galleryCount" class="count"></span><span style="flex:1"></span><button id="galleryRescan" title="Rebuild the list from ComfyUI's history — recovers permanently-saved renders that dropped off this browser's list (only while that ComfyUI process is still running)" style="padding:2px 9px; font-size:11px; text-transform:none; letter-spacing:0;">⟳ Rescan</button><button id="gallerySortBtn" title="Toggle order by creation date" style="padding:2px 9px; font-size:11px; text-transform:none; letter-spacing:0;">↓ Newest</button><button id="galleryClear" title="Clear gallery list (does not delete files)" style="padding:2px 9px; font-size:11px; text-transform:none; letter-spacing:0;">Clear</button></div>
         <div class="gallery" id="gallery"></div>
