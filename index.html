@@ -129,10 +129,10 @@
   button:hover { background: #222c3c; border-color: #3c4b60; transform: translateY(-1px); }
   button:active { transform: translateY(0); }
   button.primary {
-    background: linear-gradient(135deg, var(--accent), #7c5cf0);
+    background: #f32446;
     border-color: transparent; color: #fff;
   }
-  button.primary:hover { background: linear-gradient(135deg, var(--accent-hover), #6d4ce6); }
+  button.primary:hover { background: #f43f5e; }
   button.ghost { background: transparent; border-color: var(--border); }
   button:disabled { opacity: .5; cursor: not-allowed; transform: none; }
   /* gear/symbol glyphs render tiny ("dot"-like) at body size; bump them in buttons */
@@ -271,10 +271,10 @@
   .img-drop-prompt { font-size: 12px; color: var(--faint); line-height: 1.5; }
   .img-drop-preview { display: flex; align-items: center; gap: 12px; text-align: left; }
   .img-drop-preview img { max-width: 120px; max-height: 120px; border-radius: var(--r); border: 1px solid var(--border); display: block; }
-  .seg { display: inline-flex; border: 1px solid var(--border-strong); border-radius: var(--r); overflow: hidden; }
-  .seg button { border: none; border-radius: 0; padding: 7px 16px; background: var(--bg); font-weight: 500; }
+  .seg { padding:3px;display: inline-flex; border: 1px solid var(--border-strong); border-radius: var(--r); overflow: hidden; }
+  .seg button { border: none; border-radius: 0; padding: 7px 16px;  font-weight: 500; }
   .seg button:hover { transform: none; }
-  .seg button.active { background: linear-gradient(135deg, var(--accent), #7c5cf0); color: #fff; }
+  .seg button.active { background: #273449; }
   .spinner { width: 14px; height: 14px; border: 2px solid var(--border-strong); border-top-color: var(--accent-2); border-radius: 50%; display: inline-block; animation: spin .7s linear infinite; vertical-align: middle; margin-right: 4px; }
   @keyframes spin { to { transform: rotate(360deg); } }
 
