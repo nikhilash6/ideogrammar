@@ -334,6 +334,18 @@
       <span class="gpu-cap">VRAM <b id="gpuVramPct">—</b></span>
       <canvas id="gpuVramSpark" width="64" height="20"></canvas>
     </div>
+    <div class="gpu-g">
+      <span class="gpu-cap">CPU <b id="cpuPct">—</b></span>
+      <canvas id="cpuSpark" width="64" height="20"></canvas>
+    </div>
+    <div class="gpu-g">
+      <span class="gpu-cap">RAM <b id="ramPct">—</b></span>
+      <canvas id="ramSpark" width="64" height="20"></canvas>
+    </div>
+    <div class="gpu-g">
+      <span class="gpu-cap">TEMP <b id="gpuTemp">—</b></span>
+      <canvas id="gpuTempSpark" width="64" height="20"></canvas>
+    </div>
   </div>
   <div class="seg" id="modeSeg" title="Manual = copy the JSON yourself · ComfyUI = render it on your server">
     <button type="button" data-mode="manual">Manual</button>
@@ -1136,22 +1148,23 @@ function buildLayoutJSON() {
   };
 }
 
-function scaleBoxToPixels(b, w, h) {
-  return [Math.round(b[0] / COORD * w), Math.round(b[1] / COORD * h),
-          Math.round(b[2] / COORD * w), Math.round(b[3] / COORD * h)];
-}
-
-// Display / diffusion-facing prompt: bboxes are expressed in the SAME pixel
-// coordinate frame as the stated canvas, so the two no longer disagree. A
-// mismatched range (boxes 0..1000 vs canvas 1456+) made the model squash and
-// shuffle the layout. canvas comes first so the model reads the frame up front.
+// Diffusion-facing prompt. Ideogram 4 was trained on a 0..1000 normalized grid
+// (per-axis), in the Gemini-style [ymin, xmin, ymax, xmax] order — the same
+// space and order KJNodes' builder emits. Our editor stores boxes X-first
+// ([x1,y1,x2,y2]) for the UI and the LLM round-trip, so the ONLY transform here
+// is transposing to Y-first; we keep the 0..1000 range untouched. (An earlier
+// version scaled boxes to pixels to "match the canvas", but that was treating a
+// symptom of the X/Y transpose; raw pixel coords are off the training
+// distribution, so we stay on the 0..1000 grid like KJNodes.) canvas comes
+// first so the model reads the frame/aspect up front.
 function buildJSON() {
   const info = aspectInfo();
   const d = computeDims();
   const layout = buildLayoutJSON();
-  layout.compositional_deconstruction.elements = layout.compositional_deconstruction.elements.map(el => ({
-    ...el, bbox: scaleBoxToPixels(el.bbox, d.width, d.height)
-  }));
+  layout.compositional_deconstruction.elements = layout.compositional_deconstruction.elements.map(el => {
+    const [x1, y1, x2, y2] = el.bbox.map(n => Math.round(n));
+    return { ...el, bbox: [y1, x1, y2, x2] };  // [x1,y1,x2,y2] -> [ymin,xmin,ymax,xmax], 0..1000
+  });
   return { canvas: { width: d.width, height: d.height, aspect_ratio: info.ratio, orientation: info.orientation }, ...layout };
 }
 
@@ -1732,11 +1745,17 @@ function applyMode() {
 
 /* ---- GPU monitor -------------------------------------------------------- */
 // Prefers Crystools' `crystools.monitor` websocket feed (real GPU utilization
-// + temperature); falls back to polling /system_stats for VRAM if Crystools
-// isn't sending. The sparkline plots utilization when available, else VRAM.
+// + temperature, plus CPU and system RAM); falls back to polling /system_stats
+// for VRAM if Crystools isn't sending. CPU/RAM/temp come only from Crystools, so
+// they read "n/a" on the HTTP fallback. The sparkline plots utilization when
+// available, else VRAM. Temperature is normalized over 0-100 deg C for its spark.
 const GPU_SAMPLES = 64;
+const TEMP_MAX = 100;         // deg C, full-scale for the temperature sparkline
 let utilHist = [];
 let vramHist = [];
+let cpuHist = [];
+let ramHist = [];
+let tempHist = [];
 let gpuTimer = null;          // HTTP VRAM fallback poll
 let gpuWS = null;             // crystools monitor socket
 let gpuWSRetry = null;
@@ -1772,8 +1791,14 @@ function openGpuWS() {
     const g = (m.data.gpus || [])[0];
     if (!g) return;
     gpuLastCrystools = Date.now();
+    const d = m.data;
     const vramFrac = g.vram_total ? g.vram_used / g.vram_total : (g.vram_used_percent != null ? g.vram_used_percent / 100 : null);
-    applyGpu((g.gpu_utilization || 0) / 100, vramFrac, { vram_used: g.vram_used, vram_total: g.vram_total, temp: g.gpu_temperature });
+    const cpuFrac = d.cpu_utilization != null ? d.cpu_utilization / 100 : null;
+    const ramFrac = d.ram_total ? d.ram_used / d.ram_total : (d.ram_used_percent != null ? d.ram_used_percent / 100 : null);
+    applyGpu((g.gpu_utilization || 0) / 100, vramFrac, {
+      vram_used: g.vram_used, vram_total: g.vram_total, temp: g.gpu_temperature,
+      cpu: cpuFrac, ram: ramFrac, ram_used: d.ram_used, ram_total: d.ram_total
+    });
   };
   ws.onerror = () => { try { ws.close(); } catch (_) {} };
   ws.onclose = () => {
@@ -1798,6 +1823,7 @@ async function pollGpu() {
   } catch (_) {
     $("gpuMon").classList.add("stale");
     $("gpuUtilPct").textContent = "n/a"; $("gpuVramPct").textContent = "n/a";
+    $("cpuPct").textContent = "n/a"; $("ramPct").textContent = "n/a"; $("gpuTemp").textContent = "n/a";
   }
 }
 
@@ -1810,15 +1836,28 @@ function applyGpu(util, vram, x) {
   else { $("gpuUtilPct").textContent = "n/a"; }
   if (vram != null) { vram = clamp01(vram); vramHist.push(vram); if (vramHist.length > GPU_SAMPLES) vramHist.shift(); $("gpuVramPct").textContent = Math.round(vram * 100) + "%"; }
   else { $("gpuVramPct").textContent = "n/a"; }
+  let cpu = x.cpu, ram = x.ram;
+  if (cpu != null) { cpu = clamp01(cpu); cpuHist.push(cpu); if (cpuHist.length > GPU_SAMPLES) cpuHist.shift(); $("cpuPct").textContent = Math.round(cpu * 100) + "%"; }
+  else { $("cpuPct").textContent = "n/a"; }
+  if (ram != null) { ram = clamp01(ram); ramHist.push(ram); if (ramHist.length > GPU_SAMPLES) ramHist.shift(); $("ramPct").textContent = Math.round(ram * 100) + "%"; }
+  else { $("ramPct").textContent = "n/a"; }
+  if (x.temp != null) { tempHist.push(clamp01(x.temp / TEMP_MAX)); if (tempHist.length > GPU_SAMPLES) tempHist.shift(); $("gpuTemp").textContent = Math.round(x.temp) + "°C"; }
+  else { $("gpuTemp").textContent = "n/a"; }
   const parts = [];
   if (util != null) parts.push("GPU " + Math.round(util * 100) + "%");
   if (x.vram_used != null && x.vram_total) parts.push("VRAM " + gb(x.vram_used) + "/" + gb(x.vram_total) + " GB");
   else if (vram != null) parts.push("VRAM " + Math.round(vram * 100) + "%");
+  if (cpu != null) parts.push("CPU " + Math.round(cpu * 100) + "%");
+  if (x.ram_used != null && x.ram_total) parts.push("RAM " + gb(x.ram_used) + "/" + gb(x.ram_total) + " GB");
+  else if (ram != null) parts.push("RAM " + Math.round(ram * 100) + "%");
   if (x.temp != null) parts.push(Math.round(x.temp) + "°C");
-  if (util == null) parts.push("(utilization needs Crystools)");
+  if (util == null) parts.push("(GPU/CPU/RAM need Crystools)");
   $("gpuMon").title = parts.join(" · ") || "ComfyUI GPU";
   drawSpark($("gpuUtilSpark"), utilHist, "#6366f1");
   drawSpark($("gpuVramSpark"), vramHist, "#22b8cf");
+  drawSpark($("cpuSpark"), cpuHist, "#f59e0b");
+  drawSpark($("ramSpark"), ramHist, "#10b981");
+  drawSpark($("gpuTempSpark"), tempHist, "#ef4444");
 }
 
 function drawSpark(cv, hist, color) {
@@ -2020,7 +2059,7 @@ function buildPromptText() {
   const info = aspectInfo();
   const d = obj.canvas;
   let lead;
-  const coord = ` Element bboxes are [x1,y1,x2,y2] in pixels within this ${d.width}x${d.height} frame, origin top-left, x right, y down; place each element exactly there, do not rotate or mirror the layout.`;
+  const coord = ` Element bboxes are [ymin,xmin,ymax,xmax] on a 0-1000 normalized grid (each axis 0-1000 independent of the ${d.width}x${d.height} pixel size), origin top-left, x right, y down; place each element exactly there, do not rotate or mirror the layout.`;
   if (info.orientation === "landscape")
     lead = `LANDSCAPE orientation: a wide horizontal ${info.ratio} image, ${d.width}x${d.height} pixels (wider than tall).` + coord;
   else if (info.orientation === "portrait")
