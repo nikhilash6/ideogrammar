@@ -184,6 +184,10 @@
 
   /* ---------- canvas ---------- */
   .canvas-wrap { position: relative; background: #0d1119; border-radius: var(--r); overflow: hidden; box-shadow: var(--shadow), 0 0 0 1px var(--border); flex-shrink: 0; }
+  /* Superimpose: the latest rendered image sits behind the boxes so you can
+     eyeball how well the model honored the layout. Aspect matches the canvas. */
+  #backdropImg { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: none; pointer-events: none; }
+  .canvas-wrap.has-backdrop #backdropImg { display: block; }
   #stage { position: absolute; inset: 0; }
   .box { position: absolute; border: 2px solid var(--accent); background: rgba(99,102,241,.1); cursor: move; font-size: 11px; color: #fff; overflow: visible; border-radius: 2px; transition: box-shadow .1s; }
   .box .lbl { position: absolute; top: 0; left: 0; padding: 2px 6px; font-size: 10px; font-weight: 600; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; border-radius: 0 0 5px 0; pointer-events: none; }
@@ -261,6 +265,7 @@
 
   /* ---------- comfyui mode ---------- */
   .comfy-only { display: none; }
+  body.comfy-mode #backdropCtrls { display: flex; }
   body.comfy-mode #gpuMon { display: flex; }
   body.comfy-mode #comfyPanel { display: block; }
   body.comfy-mode #renderResult { display: flex; }
@@ -556,10 +561,14 @@
         <div class="tile-bar-controls" id="canvasControls">
           <label class="toggle"><input type="checkbox" id="gridToggle" checked> Grid</label>
           <label class="toggle"><input type="checkbox" id="labelToggle" checked> Labels</label>
+          <span class="toggle comfy-only" id="backdropCtrls" style="gap:6px;">
+            <label class="toggle" style="gap:7px;" title="Show the latest rendered image behind the boxes to compare layout vs. result"><input type="checkbox" id="backdropToggle"> Backdrop</label>
+            <input type="range" id="backdropOpacity" min="0" max="100" value="60" title="Backdrop opacity" style="width:70px; display:none;">
+          </span>
         </div>
       </div>
       <div class="tile-body canvas-body">
-        <div class="canvas-area" id="canvasArea"><div class="canvas-wrap" id="canvasWrap"><div id="stage"></div></div></div>
+        <div class="canvas-area" id="canvasArea"><div class="canvas-wrap" id="canvasWrap"><img id="backdropImg" alt=""><div id="stage"></div></div></div>
       </div>
     </div>
   </div>
@@ -1048,6 +1057,27 @@ function renderCanvas() {
 
     stage.appendChild(box);
   });
+
+  updateBackdrop();
+}
+
+// Superimpose mode: mirror whatever is currently shown in the Rendered-output
+// panel ($("renderImg")) onto the canvas backdrop, so it tracks new renders and
+// history navigation automatically (including baked rotation). A no-op when the
+// toggle is off or there is no rendered image yet.
+function updateBackdrop() {
+  const wrap = $("canvasWrap"), bd = $("backdropImg"), slider = $("backdropOpacity");
+  const on = $("backdropToggle").checked && document.body.classList.contains("comfy-mode");
+  slider.style.display = on ? "" : "none";
+  const ri = $("renderImg");
+  const src = ri.style.display !== "none" ? (ri.currentSrc || ri.src) : "";
+  if (on && src) {
+    if (bd.src !== src) bd.src = src;
+    bd.style.opacity = (parseInt(slider.value, 10) || 0) / 100;
+    wrap.classList.add("has-backdrop");
+  } else {
+    wrap.classList.remove("has-backdrop");
+  }
 }
 
 let drag = null;
@@ -1567,6 +1597,8 @@ $("importBtn").addEventListener("click", () => $("fileInput").click());
 $("fileInput").addEventListener("change", e => { if (e.target.files[0]) doImport(e.target.files[0]); e.target.value = ""; });
 $("gridToggle").addEventListener("change", renderCanvas);
 $("labelToggle").addEventListener("change", renderCanvas);
+$("backdropToggle").addEventListener("change", updateBackdrop);
+$("backdropOpacity").addEventListener("input", updateBackdrop);
 
 // collapsible left panels
 document.querySelectorAll("[data-collapsible] .panel-head").forEach(h => {
@@ -2255,7 +2287,7 @@ async function showResult(base, promptId) {
   lastRenderImage = { filename: entry.filename, subfolder: entry.subfolder, type: entry.type, rotation: 0, aspect: entry.aspect };
   if (entry.setup) entry.setup.render = lastRenderImage;
   const el = $("renderImg");
-  el.onload = () => { el.style.display = "block"; $("renderPlaceholder").style.display = "none"; };
+  el.onload = () => { el.style.display = "block"; $("renderPlaceholder").style.display = "none"; updateBackdrop(); };
   el.onerror = () => setRenderStatus("Image rendered but could not be loaded from " + comfyBase() + "/view", "err");
   el.src = viewUrl(entry);
   setRenderStatus("Done ✓ · seed " + comfyCfg.seed + (comfyCfg.save ? " · saved" : ""), "ok");
@@ -2488,7 +2520,7 @@ async function rotateViewer(delta) {
   saveRenderHistory();
   await refreshViewerImage(it);
   renderGallery();
-  if (viewerIndex === renderHistory.length - 1) bakeRotated(viewUrl(it), it.rotation).then(u => { $("renderImg").src = u; }).catch(() => {});
+  if (viewerIndex === renderHistory.length - 1) bakeRotated(viewUrl(it), it.rotation).then(u => { $("renderImg").src = u; updateBackdrop(); }).catch(() => {});
 }
 function openImgModal(index) {
   if (!renderHistory.length) return;
@@ -2624,10 +2656,11 @@ function showRenderInPreview(ref) {
   if (!ref || !ref.filename || !comfyBase()) {
     el.style.display = "none"; el.removeAttribute("src");
     $("renderPlaceholder").style.display = "";
+    updateBackdrop();
     return;
   }
-  el.onload = () => { el.style.display = "block"; $("renderPlaceholder").style.display = "none"; };
-  el.onerror = () => { el.style.display = "none"; $("renderPlaceholder").style.display = ""; };
+  el.onload = () => { el.style.display = "block"; $("renderPlaceholder").style.display = "none"; updateBackdrop(); };
+  el.onerror = () => { el.style.display = "none"; $("renderPlaceholder").style.display = ""; updateBackdrop(); };
   if (ref.rotation) bakeRotated(viewUrl(ref), ref.rotation).then(u => { el.src = u; }).catch(() => { el.src = viewUrl(ref); });
   else el.src = viewUrl(ref);
 }
