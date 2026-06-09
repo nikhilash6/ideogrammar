@@ -531,22 +531,53 @@ _SAM_PREDICTOR = None
 _SAM_TRIED = False
 
 def _sam_predictor():
-    """Lazily build a SAM predictor if SAM_CHECKPOINT is set and importable."""
+    """Lazily build a SAM predictor if SAM_CHECKPOINT is set and importable.
+
+    Logs exactly why SAM does or doesn't load (to comfy_proxy.log via stderr).
+    SAM is optional — on any failure we return None and the caller falls back to
+    the foreground heuristic — but the failure is no longer silent, so a user
+    setting it up can see what's wrong instead of guessing.
+    """
     global _SAM_PREDICTOR, _SAM_TRIED
     if _SAM_TRIED:
         return _SAM_PREDICTOR
     _SAM_TRIED = True
+
+    def log(msg):
+        sys.stderr.write("[sam] %s\n" % msg)
+        sys.stderr.flush()
+
     ckpt = os.environ.get("SAM_CHECKPOINT")
-    if not ckpt or not os.path.isfile(ckpt):
+    mtype = os.environ.get("SAM_MODEL_TYPE", "vit_b")
+    if not ckpt:
+        log("SAM_CHECKPOINT not set — using the foreground heuristic for masks. "
+            "Set SAM_CHECKPOINT (and SAM_MODEL_TYPE) to enable SAM.")
+        return None
+    if not os.path.isfile(ckpt):
+        log("SAM_CHECKPOINT=%r does not exist — falling back to the heuristic. "
+            "Check the path (it must be absolute for the service)." % ckpt)
         return None
     try:
         import torch
         from segment_anything import sam_model_registry, SamPredictor
-        mtype = os.environ.get("SAM_MODEL_TYPE", "vit_b")
+        if mtype not in sam_model_registry:
+            log("SAM_MODEL_TYPE=%r is not one of %s — falling back to the heuristic."
+                % (mtype, list(sam_model_registry.keys())))
+            return None
         sam = sam_model_registry[mtype](checkpoint=ckpt)
-        sam.to("cuda" if torch.cuda.is_available() else "cpu")
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        sam.to(device)
         _SAM_PREDICTOR = SamPredictor(sam)
-    except Exception:
+        log("loaded SAM (%s) on %s from %s" % (mtype, device, ckpt))
+    except ImportError as e:
+        log("SAM deps missing (%s) — install into the proxy's venv: "
+            "pip install torch torchvision and the segment-anything package. "
+            "Falling back to the heuristic." % e)
+        _SAM_PREDICTOR = None
+    except Exception as e:
+        log("SAM failed to load (%s: %s) — common cause is SAM_MODEL_TYPE not "
+            "matching the checkpoint (vit_b/vit_l/vit_h). Falling back to the "
+            "heuristic." % (type(e).__name__, e))
         _SAM_PREDICTOR = None
     return _SAM_PREDICTOR
 
@@ -748,6 +779,14 @@ def main():
         ok = os.path.isdir(ARGS.output_dir)
         print("  output dir: %s%s" % (ARGS.output_dir, "" if ok else "  (NOT a readable folder — gallery recovery disabled)"))
     print("  editor Server URL: leave blank (uses this origin) or set %s" % url.rstrip("/"))
+    _sam_ckpt = os.environ.get("SAM_CHECKPOINT")
+    if not _sam_ckpt:
+        print("  vectorize masks: foreground heuristic (SAM not configured; set SAM_CHECKPOINT to enable)")
+    elif not os.path.isfile(_sam_ckpt):
+        print("  vectorize masks: heuristic — SAM_CHECKPOINT does not exist: %s" % _sam_ckpt)
+    else:
+        print("  vectorize masks: SAM configured (%s, %s) — loads on first vectorize"
+              % (os.environ.get("SAM_MODEL_TYPE", "vit_b"), _sam_ckpt))
     print("Press Ctrl+C to stop.")
     try:
         srv.serve_forever()

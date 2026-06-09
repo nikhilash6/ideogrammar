@@ -115,14 +115,35 @@ curl -L -o models/sam_vit_b_01ec64.pth \
   https://dl.fbaipublicfiles.com/segment_anything/sam_vit_b_01ec64.pth
 ```
 
-Point the service at it — `install-service` writes the env vars into the systemd unit when they're set, so it persists across restarts:
+Then tell the proxy where the checkpoint is. The env vars must reach the **proxy process**, and how depends on how you run it:
+
+**Easiest (works for every run mode)** — put them in `comfy_proxy.env` (the same untracked file used for `COMFY_URL`; `comfy_proxy.sh` sources it on `start`/`restart` and `install-service` picks it up too):
+
+```bash
+cat >> comfy_proxy.env <<EOF
+SAM_CHECKPOINT=$PWD/models/sam_vit_b_01ec64.pth
+SAM_MODEL_TYPE=vit_b
+EOF
+./comfy_proxy.sh restart        # or: install-service
+```
+
+**As a background service** — `install-service` bakes the vars into the systemd unit when they're set in the environment, so they persist across reboots:
 
 ```bash
 SAM_CHECKPOINT="$PWD/models/sam_vit_b_01ec64.pth" SAM_MODEL_TYPE=vit_b \
   PYTHON="$PWD/.venv/bin/python" ./comfy_proxy.sh install-service
 ```
 
-If SAM fails to load it silently falls back to the heuristic, so the feature never hard-breaks.
+**Running the Python directly** — just export them in the same shell first:
+
+```bash
+export SAM_CHECKPOINT="$PWD/models/sam_vit_b_01ec64.pth" SAM_MODEL_TYPE=vit_b
+.venv/bin/python comfy_proxy.py --comfy http://127.0.0.1:8188 --port 8189
+```
+
+> **Use an absolute path** for `SAM_CHECKPOINT` (the service has a different working directory), and make sure `SAM_MODEL_TYPE` matches the checkpoint you downloaded (`vit_b` / `vit_l` / `vit_h`).
+
+**Verify it's working.** On startup the proxy prints its mask backend, e.g. `vectorize masks: SAM configured (vit_b, …) — loads on first vectorize`. SAM loads lazily on the first **⬡ Vectorize**, and that's when you'll see a `[sam] loaded SAM (vit_b) on cuda …` line — or, if something's off, a `[sam] …` line saying exactly why (missing dep, wrong path, model-type mismatch). Watch the log with `./comfy_proxy.sh logs`. On any failure SAM falls back to the foreground heuristic, so the feature never hard-breaks — it just won't be using SAM, and the log now tells you why.
 
 > **Speed (CPU):** the CPU build is not fast — the first vectorize after a (re)start pays a one-time model-load cost (~a minute), and each region then takes a few seconds. Fine for an occasional manual action. For GPU speed (it shares the card with ComfyUI; the code auto-selects CUDA when available), install a CUDA build instead and restart:
 >
