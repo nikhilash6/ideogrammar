@@ -178,6 +178,10 @@
   .element-head .acts { display: flex; gap: 2px; }
   .element-body { padding: 4px 12px 12px; }
   .element.collapsed .element-body { display: none; }
+  /* Disabled elements stay in the list but are excluded from the prompt. */
+  .element.disabled .element-head .title { opacity: .45; text-decoration: line-through; }
+  .element.disabled .element-body { opacity: .55; }
+  .box.disabled { opacity: .3; border-style: dashed; }
   .refine-row { display: flex; gap: 6px; align-items: stretch; }
   .refine-row input { flex: 1; min-width: 0; }
   .refine-row button { flex-shrink: 0; padding: 6px 10px; white-space: nowrap; }
@@ -798,6 +802,7 @@ function emptyElement(seed = {}) {
     desc: seed.desc ?? "",
     color_palette: seed.color_palette ?? ["#FFFFFF"],
     vectorize: seed.vectorize ?? "auto",
+    enabled: seed.enabled !== false,   // off elements stay in the setup but drop out of the prompt
     _collapsed: seed._collapsed ?? true
   };
 }
@@ -884,7 +889,7 @@ function renderElements() {
   wrap.innerHTML = "";
   state.elements.forEach((el, i) => {
     const card = document.createElement("div");
-    card.className = "element" + (el._id === selectedId ? " selected" : "") + (el._collapsed ? " collapsed" : "");
+    card.className = "element" + (el._id === selectedId ? " selected" : "") + (el._collapsed ? " collapsed" : "") + (el.enabled === false ? " disabled" : "");
     card.dataset.index = i;
 
     /* ---- header ---- */
@@ -914,9 +919,12 @@ function renderElements() {
     up.disabled = i === 0;
     const down = iconBtn("↓", "Move down", () => moveElement(i, i + 1));
     down.disabled = i === state.elements.length - 1;
+    const on = el.enabled !== false;
+    const eye = iconBtn(on ? "👁" : "🚫", on ? "Enabled — click to exclude from the prompt" : "Disabled — click to include again",
+      () => { el.enabled = !on; selectedId = el._id; render(); });
     const del = iconBtn("🗑", "Delete", () => removeElement(el._id));
     del.classList.add("del");
-    acts.append(up, down, del);
+    acts.append(eye, up, down, del);
 
     const toggle = () => { el._collapsed = !el._collapsed; selectedId = el._id; render(); };
     chev.addEventListener("click", (e) => { e.stopPropagation(); toggle(); });
@@ -1060,7 +1068,7 @@ function renderCanvas() {
     const left = Math.min(x1, x2), top = Math.min(y1, y2);
     const w = Math.abs(x2 - x1), h = Math.abs(y2 - y1);
     const box = document.createElement("div");
-    box.className = "box" + (el._id === selectedId ? " selected" : "");
+    box.className = "box" + (el._id === selectedId ? " selected" : "") + (el.enabled === false ? " disabled" : "");
     box.style.left = (left / COORD * 100) + "%";
     box.style.top = (top / COORD * 100) + "%";
     box.style.width = (w / COORD * 100) + "%";
@@ -1284,7 +1292,9 @@ function buildLayoutJSON() {
     },
     compositional_deconstruction: {
       background: state.background,
-      elements: state.elements.map(el => ({
+      // Disabled elements are kept in state (so they can be re-enabled) but
+      // excluded from the prompt the model sees and from the JSON output.
+      elements: state.elements.filter(el => el.enabled !== false).map(el => ({
         type: el.type,
         bbox: el.bbox.map(n => Math.round(n)),
         desc: el.desc,
@@ -1418,7 +1428,8 @@ function loadFromJSON(data) {
       type: e.type || "obj",
       bbox: Array.isArray(e.bbox) && e.bbox.length === 4 ? scaleBoxFromPixels(e.bbox, srcW, srcH) : [100, 100, 500, 500],
       desc: e.desc || "",
-      color_palette: Array.isArray(e.color_palette) ? e.color_palette.map(normalizeUpper) : []
+      color_palette: Array.isArray(e.color_palette) ? e.color_palette.map(normalizeUpper) : [],
+      enabled: e.enabled
     })) : []
   };
   selectedId = null;
@@ -1676,10 +1687,14 @@ async function runRefine() {
     const content = await chatCompletion(cfg, headers, body);
     const parsed = extractJSON(content);
     if (!parsed) throw new Error("Could not parse JSON from the model's reply.");
-    const prevVec = state.elements.map(e => e.vectorize || "auto");
+    // Only enabled elements were sent, so align vectorize modes to those and
+    // keep the disabled ones aside to re-append (the model never saw them).
+    const prevVec = state.elements.filter(e => e.enabled !== false).map(e => e.vectorize || "auto");
+    const disabledEls = state.elements.filter(e => e.enabled === false);
     loadFromJSON(parsed);
     // best-effort: carry over per-element vectorize modes by position
     state.elements.forEach((e, i) => { if (prevVec[i]) e.vectorize = prevVec[i]; });
+    if (disabledEls.length) state.elements.push(...disabledEls);   // restore disabled, still off
     render();
     setRefineStatus("Refined ✓", "ok");
     toast("Setup refined ✓", "ok");
@@ -2817,7 +2832,7 @@ function captureSetup() {
     high_level_description: state.high_level_description,
     style_description: JSON.parse(JSON.stringify(state.style_description)),
     background: state.background,
-    elements: state.elements.map(e => ({ type: e.type, bbox: e.bbox.slice(), desc: e.desc, color_palette: e.color_palette.slice(), vectorize: e.vectorize || "auto" })),
+    elements: state.elements.map(e => ({ type: e.type, bbox: e.bbox.slice(), desc: e.desc, color_palette: e.color_palette.slice(), vectorize: e.vectorize || "auto", enabled: e.enabled !== false })),
     comfy,
     render: lastRenderImage ? { ...lastRenderImage } : null
   };
@@ -2873,7 +2888,7 @@ function applySetup(s) {
     elements: Array.isArray(s.elements) ? s.elements.map(e => emptyElement({
       type: e.type || "obj",
       bbox: Array.isArray(e.bbox) && e.bbox.length === 4 ? e.bbox.map(n => clamp(Math.round(+n || 0), 0, COORD)) : [100, 100, 500, 500],
-      desc: e.desc || "", color_palette: Array.isArray(e.color_palette) ? e.color_palette.map(normalizeUpper) : [], vectorize: e.vectorize || "auto"
+      desc: e.desc || "", color_palette: Array.isArray(e.color_palette) ? e.color_palette.map(normalizeUpper) : [], vectorize: e.vectorize || "auto", enabled: e.enabled
     })) : []
   };
   if (s.comfy) SETUP_COMFY_KEYS.forEach(k => { if (k in s.comfy) comfyCfg[k] = s.comfy[k]; });
