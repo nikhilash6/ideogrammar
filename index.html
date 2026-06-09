@@ -492,7 +492,8 @@
           <label class="toggle" style="white-space:nowrap;"><input type="checkbox" id="cf-randomize"> random</label>
         </div>
         <label>Guidance (CFG)</label>
-        <input type="number" id="cf-cfg" min="0" step="0.1">
+        <input type="number" id="cf-cfg" min="0" step="0.1" title="Classifier-free guidance scale. How strongly the image follows the prompt.">
+        <div class="hint">How strongly the image follows the prompt. Higher = tighter adherence but can over-saturate / harden contrast; lower = softer and more natural. Default 7.</div>
 
         <label class="toggle" style="margin-top:12px;"><input type="checkbox" id="cf-save"> Save renders permanently <span style="color:var(--faint)">(ComfyUI output/, kept in gallery across reloads)</span></label>
 
@@ -540,13 +541,14 @@
               <option value="uni_pc_bh2">uni_pc_bh2</option>
             </select>
             <div class="row2">
-              <div><label>CFG override</label><input type="number" id="cf-cfgo" step="0.1"></div>
-              <div><label>Batch size</label><input type="number" id="cf-batch" min="1" step="1"></div>
+              <div><label>CFG override</label><input type="number" id="cf-cfgo" step="0.1" title="Alternate guidance value used only inside the Start%–End% window of the denoising run."></div>
+              <div><label>Batch size</label><input type="number" id="cf-batch" min="1" step="1" title="How many images to generate per render. More = more VRAM and time."></div>
             </div>
             <div class="row2">
-              <div><label>Override start %</label><input type="number" id="cf-start" min="0" max="1" step="0.05"></div>
-              <div><label>Override end %</label><input type="number" id="cf-end" min="0" max="1" step="0.05"></div>
+              <div><label>Override start %</label><input type="number" id="cf-start" min="0" max="1" step="0.05" title="Where the CFG override begins on the denoising timeline (0 = first step, 1 = last)."></div>
+              <div><label>Override end %</label><input type="number" id="cf-end" min="0" max="1" step="0.05" title="Where the CFG override ends on the denoising timeline (0 = first step, 1 = last)."></div>
             </div>
+            <div class="hint"><b>CFG override</b> applies a different guidance value during only part of the run. <b>Start/End %</b> are points on the denoising timeline (0 = first step, 1 = last); the override CFG is used only inside that window. The default (3 over 0.90–1.00) lowers guidance for the final 10% of steps to reduce over-sharpening and color burn. Set override = Guidance, or start ≥ end, to disable. The % is a fraction of the step count, so it covers fewer steps in Turbo (12) than Quality (48). <b>Batch size</b> = how many images per render (more = more VRAM and time).</div>
             <label>Diffusion model (unet)</label>
             <input type="text" id="cf-diff">
             <label>Unconditional model (unet)</label>
