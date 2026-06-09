@@ -178,6 +178,11 @@
   .element-head .acts { display: flex; gap: 2px; }
   .element-body { padding: 4px 12px 12px; }
   .element.collapsed .element-body { display: none; }
+  .refine-row { display: flex; gap: 6px; align-items: stretch; }
+  .refine-row input { flex: 1; min-width: 0; }
+  .refine-row button { flex-shrink: 0; padding: 6px 10px; white-space: nowrap; }
+  .refine-status:empty { display: none; }
+  .refine-status { margin: 4px 0 0; }
   .bbox-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 7px; }
   .bbox-grid label { margin: 0 0 3px; text-align: center; }
   .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
@@ -972,6 +977,20 @@ function renderElements() {
     desc.addEventListener("input", () => { el.desc = desc.value; title.innerHTML = escapeHtml(el.desc) || "<em style='color:var(--faint)'>empty object</em>"; renderCanvas(); renderJSON(); });
     body.appendChild(desc);
 
+    const refLabel = document.createElement("label"); refLabel.textContent = "Refine with AI";
+    body.appendChild(refLabel);
+    const refRow = document.createElement("div"); refRow.className = "refine-row";
+    const refInput = document.createElement("input");
+    refInput.type = "text"; refInput.placeholder = "change to make (empty = just improve current text)";
+    const refBtn = document.createElement("button"); refBtn.textContent = "✨ Refine";
+    refRow.append(refInput, refBtn);
+    body.appendChild(refRow);
+    const refStatus = document.createElement("div"); refStatus.className = "status refine-status";
+    body.appendChild(refStatus);
+    const runRef = () => refineElement(el, refInput.value.trim(), { status: refStatus, btn: refBtn, input: refInput, desc, title });
+    refBtn.addEventListener("click", runRef);
+    refInput.addEventListener("keydown", e => { e.stopPropagation(); if (e.key === "Enter") { e.preventDefault(); runRef(); } });
+
     const bboxLabel = document.createElement("label"); bboxLabel.textContent = "Bounding box  [x1, y1, x2, y2]  (0–1000)";
     body.appendChild(bboxLabel);
     const grid = document.createElement("div");
@@ -1494,6 +1513,8 @@ const REFINE_SYSTEM_PROMPT = SYSTEM_PROMPT + `
 
 REFINEMENT MODE: You are given an EXISTING setup as JSON and a change request. Return the COMPLETE updated setup in the exact same shape — not a diff, not only the changed fields. Apply the requested change faithfully and adjust whatever else is needed for it to make sense (e.g. "lighter composition" may touch lighting, palette, background, element sizes and positions). Preserve everything the request does not affect: keep unrelated descriptions, the element set, types and bboxes the same unless the change implies otherwise. Keep the same kinds/number of elements unless the request asks to add or remove some.`;
 
+const ELEMENT_REFINE_SYSTEM_PROMPT = `You rewrite ONE element's description for an Ideogram 4 image-layout prompt. You are given the overall scene (for context only), the element's type, its current description, and a change request. Return ONLY the rewritten description as a single concise, vivid plain-text line — no JSON, no quotes, no field names, no preamble, no explanation. Apply the change request and keep the rest faithful to the current description; if the current description is empty, write one from the request. For a "text" element, keep or produce the literal words to render. Do not describe other elements or the whole scene — only this one element.`;
+
 let generating = false;
 let genImageDataUrl = null;   // base64 data URL of an uploaded reference image, or null
 
@@ -1670,6 +1691,68 @@ async function runRefine() {
   } finally {
     refining = false;
     $("refineRun").disabled = false;
+  }
+}
+
+// Per-element refine: send only this element's description + a change request to
+// the LLM and drop the rewritten text back into the element. Plain-text reply
+// (no JSON) since it's a single field. `ui` carries the card's controls so we
+// can update them in place without rebuilding the whole sidebar.
+let elRefining = false;
+function setElRefStatus(ui, html, cls) { ui.status.innerHTML = html; ui.status.className = "status refine-status" + (cls ? " " + cls : ""); }
+function cleanRefinedText(text) {
+  if (typeof text !== "string") return "";
+  let t = text.trim();
+  const fence = t.match(/```(?:\w+)?\s*([\s\S]*?)```/);
+  if (fence) t = fence[1].trim();
+  if (/^[\[{]/.test(t)) { const j = extractJSON(t); if (j) t = typeof j === "string" ? j : (j.desc || j.description || j.text || t); }
+  return t.replace(/^["'`\s]+|["'`\s]+$/g, "").replace(/\s+/g, " ").trim();
+}
+async function refineElement(el, instruction, ui) {
+  if (elRefining) return;
+  const cfg = loadCfg();
+  // No instruction => just rewrite the current text better. Only error when
+  // there's nothing to work from at all (no instruction AND no description).
+  const hasDesc = !!(el.desc || "").trim();
+  if (!instruction && !hasDesc) { setElRefStatus(ui, "Add a description or an instruction first.", "err"); ui.input.focus(); return; }
+  const change = instruction || "Rewrite this description so it reads better — more vivid, specific and polished for an image model — without changing its meaning or subject and without adding new elements.";
+  if (!cfg.baseUrl) { setElRefStatus(ui, "Set a Base URL in ⚙ Settings.", "err"); openSettings(); return; }
+  if (!cfg.model) { setElRefStatus(ui, "Set a Model name in ⚙ Settings.", "err"); openSettings(); return; }
+  if (cfg.provider === "openrouter" && !cfg.apiKey) { setElRefStatus(ui, "OpenRouter needs an API key (⚙ Settings).", "err"); openSettings(); return; }
+
+  elRefining = true; ui.btn.disabled = true;
+  setElRefStatus(ui, '<span class="spinner"></span>Refining…', "");
+
+  const headers = { "Content-Type": "application/json" };
+  if (cfg.apiKey) headers["Authorization"] = "Bearer " + cfg.apiKey;
+  if (cfg.provider === "openrouter") { headers["HTTP-Referer"] = location.origin; headers["X-Title"] = "Ideogrammar"; }
+
+  const userMsg = "Overall scene (context only): " + (state.high_level_description || "(not specified)") +
+    "\nElement type: " + (el.type || "obj") +
+    "\nCurrent description: " + (el.desc || "(empty)") +
+    "\nChange request: " + change;
+  const body = {
+    model: cfg.model,
+    messages: [{ role: "system", content: ELEMENT_REFINE_SYSTEM_PROMPT }, { role: "user", content: userMsg }],
+    temperature: 0.6
+  };
+
+  try {
+    const content = await chatCompletion(cfg, headers, body);
+    const refined = cleanRefinedText(content);
+    if (!refined) throw new Error("Model returned empty text.");
+    el.desc = refined;
+    ui.desc.value = refined;
+    if (ui.title) ui.title.innerHTML = escapeHtml(refined) || "<em style='color:var(--faint)'>empty object</em>";
+    ui.input.value = "";
+    renderCanvas(); renderJSON();
+    setElRefStatus(ui, "Refined ✓", "ok");
+  } catch (err) {
+    let msg = err.message || String(err);
+    if (err instanceof TypeError) msg = "Network/CORS error reaching " + cfg.baseUrl + ".";
+    setElRefStatus(ui, msg, "err");
+  } finally {
+    elRefining = false; ui.btn.disabled = false;
   }
 }
 
