@@ -190,7 +190,17 @@
   .canvas-wrap.has-backdrop #backdropImg { display: block; }
   #stage { position: absolute; inset: 0; }
   .box { position: absolute; border: 2px solid var(--accent); background: rgba(99,102,241,.1); cursor: move; font-size: 11px; color: #fff; overflow: visible; border-radius: 2px; transition: box-shadow .1s; }
-  .box .lbl { position: absolute; top: 0; left: 0; padding: 2px 6px; font-size: 10px; font-weight: 600; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; border-radius: 0 0 5px 0; pointer-events: none; }
+  /* Label fills the element body and wraps, so the description is readable
+     inside the box instead of clipped in a top bar. A text-shadow (not a solid
+     fill) keeps it legible over the box tint and the superimposed backdrop;
+     long text just clips at the box edge. The numbered chip stays for ID. */
+  .box .lbl { position: absolute; inset: 0; padding: 4px 6px; font-size: 10px; font-weight: 600; line-height: 1.25; color: #fff; white-space: normal; overflow-wrap: anywhere; overflow: hidden; pointer-events: none; text-shadow: 0 1px 2px rgba(0,0,0,.9), 0 0 4px rgba(0,0,0,.55); }
+  .box .lbl .idx { display: inline-block; padding: 0 4px; margin-right: 4px; border-radius: 4px; font-variant-numeric: tabular-nums; vertical-align: baseline; }
+  /* Inline editing: the description span becomes a focusable text field. */
+  .box.editing { cursor: text; }
+  .box.editing .lbl { pointer-events: auto; }
+  .box.editing .lbl-text { background: rgba(0,0,0,.5); outline: 1px solid rgba(255,255,255,.55); border-radius: 3px; padding: 0 2px; cursor: text; }
+  .box.editing .lbl-text:focus { outline: 1px solid var(--accent); }
   .box.selected { z-index: 50; box-shadow: 0 0 0 2px rgba(255,255,255,.6), 0 6px 18px -6px rgba(0,0,0,.5); }
   .handle { position: absolute; width: 11px; height: 11px; background: #fff; border: 1.5px solid var(--accent); border-radius: 3px; }
   .handle.se { right: -6px; bottom: -6px; cursor: nwse-resize; }
@@ -1042,8 +1052,14 @@ function renderCanvas() {
 
     if (showLabels) {
       const lbl = document.createElement("div");
-      lbl.className = "lbl"; lbl.style.background = col;
-      lbl.textContent = `${i + 1} · ${shortDesc(el.desc)}`;
+      lbl.className = "lbl";
+      const idx = document.createElement("span");
+      idx.className = "idx"; idx.style.background = col; idx.textContent = i + 1;
+      const txt = document.createElement("span");
+      txt.className = "lbl-text"; txt.textContent = (el.desc || "").trim() || "object";
+      lbl.appendChild(idx);
+      lbl.appendChild(document.createTextNode(" "));
+      lbl.appendChild(txt);
       box.appendChild(lbl);
     }
 
@@ -1051,9 +1067,31 @@ function renderCanvas() {
     handle.className = "handle se"; handle.style.borderColor = col;
     box.appendChild(handle);
 
-    box.addEventListener("pointerdown", (e) => { e.stopPropagation(); startDrag(e, el, "move", box); });
+    box.title = "Shift-click or double-click to edit text";
+    box.addEventListener("pointerdown", (e) => {
+      e.stopPropagation();
+      if (box.classList.contains("editing")) return;   // let the caret land in the text
+      // Deterministic single-press trigger: Shift- or Alt-click edits the text.
+      // (Double-click also works, but is timing/pointer-capture sensitive.)
+      if (e.shiftKey || e.altKey) { e.preventDefault(); beginInlineEdit(el, box); return; }
+      // Double-click trigger: a second press on the same element within 450ms
+      // opens inline editing instead of starting a drag. Works even when pointer
+      // capture swallows the browser's synthetic dblclick event.
+      const now = Date.now();
+      if (lastBoxDown.id === el._id && now - lastBoxDown.at < 450) {
+        lastBoxDown = { id: null, at: 0 };
+        beginInlineEdit(el, box);
+        return;
+      }
+      lastBoxDown = { id: el._id, at: now };
+      startDrag(e, el, "move", box);
+    });
     handle.addEventListener("pointerdown", (e) => { e.stopPropagation(); startDrag(e, el, "resize", box); });
-    box.addEventListener("click", (e) => { e.stopPropagation(); selectElement(el._id); });
+    // Swallow the click so it can't reach the stage (which would deselect +
+    // rebuild). Selection itself already happened in startDrag. dblclick is a
+    // backup edit trigger alongside the pointerdown double-press detection.
+    box.addEventListener("click", (e) => e.stopPropagation());
+    box.addEventListener("dblclick", (e) => { e.stopPropagation(); beginInlineEdit(el, box); });
 
     stage.appendChild(box);
   });
@@ -1080,6 +1118,54 @@ function updateBackdrop() {
   }
 }
 
+// Last box pointerdown (id + timestamp), used to spot a double-press. Module-
+// level on purpose so it survives any renderCanvas() rebuild — a copy inside
+// renderCanvas() would reset every time the stage is redrawn.
+let lastBoxDown = { id: null, at: 0 };
+
+// Inline-edit an element's description right on the canvas. Edits the .lbl-text
+// span in place (contenteditable); Enter or blur commits, Escape cancels. If
+// labels are hidden there's nothing to edit, so we turn them on first.
+function beginInlineEdit(el, box) {
+  if (!el || (box && box.classList.contains("editing"))) return;   // already editing — don't re-enter
+  selectedId = el._id;
+  let txt = box && box.querySelector(".lbl-text");
+  if (!txt) {
+    $("labelToggle").checked = true;
+    renderCanvas();
+    const idx = state.elements.indexOf(el);
+    const fresh = $("stage").querySelectorAll(".box")[idx];
+    if (fresh) beginInlineEdit(el, fresh);
+    return;
+  }
+  const wasEmpty = !((el.desc || "").trim());          // label showed the "object" placeholder
+  box.classList.add("editing");
+  txt.setAttribute("contenteditable", "true");   // "plaintext-only" isn't supported everywhere
+  let closed = false;
+  const finish = (save) => {
+    if (closed) return; closed = true;
+    const val = txt.textContent.replace(/\s+/g, " ").trim();
+    txt.removeAttribute("contenteditable");
+    box.classList.remove("editing");
+    if (save) el.desc = (wasEmpty && val === "object") ? "" : val;   // don't persist the placeholder
+    renderCanvas(); renderElements(); renderJSON();
+  };
+  // Focus on the next frame so the click that follows this pointerdown can't
+  // blur it; select-all so the user can just start typing to replace.
+  requestAnimationFrame(() => {
+    if (closed) return;
+    txt.focus();
+    try { const range = document.createRange(); range.selectNodeContents(txt);
+      const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(range); } catch (_) {}
+  });
+  txt.addEventListener("blur", () => finish(true));
+  txt.addEventListener("keydown", (e) => {
+    e.stopPropagation();   // don't let canvas/global shortcuts fire while typing
+    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); txt.blur(); }
+    else if (e.key === "Escape") { e.preventDefault(); closed = true; renderCanvas(); renderElements(); }
+  });
+}
+
 let drag = null;
 function startDrag(e, el, mode, boxEl) {
   e.preventDefault();
@@ -1102,6 +1188,13 @@ function startDrag(e, el, mode, boxEl) {
 function onDrag(e) {
   if (!drag) return;
   const { el, mode, rect, orig, boxEl } = drag;
+  // Ignore sub-threshold jitter: a click (or the small wobble during a
+  // double-click) must not nudge the box or count as a drag — moving would
+  // rebuild the stage and reset the double-click detector below.
+  if (!drag.active) {
+    if (Math.hypot(e.clientX - drag.startX, e.clientY - drag.startY) < 4) return;
+    drag.active = true;
+  }
   const dx = (e.clientX - drag.startX) / rect.width * COORD;
   const dy = (e.clientY - drag.startY) / rect.height * COORD;
   let [x1, y1, x2, y2] = orig;
@@ -1130,7 +1223,7 @@ function onDrag(e) {
 
 function endDrag() {
   if (!drag) return;
-  const { boxEl, pointerId } = drag;
+  const { boxEl, pointerId, active } = drag;
   drag = null;
   if (boxEl) {
     try { boxEl.releasePointerCapture(pointerId); } catch (_) {}
@@ -1138,7 +1231,11 @@ function endDrag() {
     boxEl.removeEventListener("pointerup", endDrag);
     boxEl.removeEventListener("pointercancel", endDrag);
   }
-  renderCanvas(); renderJSON(); renderElements();
+  // Only rebuild the stage if this was a real drag (moved past the threshold).
+  // A plain click must NOT rebuild — it would churn the box node and reset the
+  // double-click detector. Selection is already applied in startDrag, so a
+  // no-move click needs no redraw.
+  if (active) { lastBoxDown = { id: null, at: 0 }; renderCanvas(); renderJSON(); renderElements(); }
 }
 
 function syncBboxInputs(el) {
@@ -1316,7 +1413,6 @@ function normalizeUpper(c) { return typeof c === "string" ? c.toUpperCase() : "#
 /* ------------------------------------------------------------------ */
 function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
 function escapeHtml(s) { return String(s).replace(/[&<>]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c])); }
-function shortDesc(d) { d = (d || "").trim(); return d.length > 26 ? d.slice(0, 26) + "…" : (d || "object"); }
 function hexToRgba(hex, a) { hex = normalizeHex(hex); const n = parseInt(hex.slice(1), 16); return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`; }
 let toastTimer;
 function toast(msg, cls) {
