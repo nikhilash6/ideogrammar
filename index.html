@@ -2234,6 +2234,13 @@ async function comfyRender() {
 
 function trackRender(base, promptId) {
   let done = false;
+  // Timeout is based on INACTIVITY, not total elapsed time: a long render (e.g.
+  // 48 steps, or a first-run model load) is fine as long as ComfyUI keeps
+  // signaling progress or the prompt stays in the queue. We only give up after
+  // STALL_MS with no sign of life — that means the server actually stalled (OOM,
+  // crash, etc.). Bump this if your server has very long silent gaps.
+  const STALL_MS = 5 * 60 * 1000;   // 5 min of total silence before we error out
+  let lastProgressAt = Date.now();
   const complete = async () => {
     if (done) return; done = true;
     try { await showResult(base, promptId); }
@@ -2251,23 +2258,33 @@ function trackRender(base, promptId) {
     ws.onmessage = (ev) => {
       if (typeof ev.data !== "string") return; // ignore binary preview frames
       let m; try { m = JSON.parse(ev.data); } catch (_) { return; }
-      if (m.type === "progress" && m.data) setBar((m.data.value || 0) / (m.data.max || 1));
-      else if (m.type === "executing" && m.data && m.data.prompt_id === promptId && m.data.node === null) { setBar(1); complete(); }
+      if (m.type === "progress" && m.data) { setBar((m.data.value || 0) / (m.data.max || 1)); lastProgressAt = Date.now(); }
+      else if (m.type === "executing" && m.data && m.data.prompt_id === promptId) {
+        lastProgressAt = Date.now();
+        if (m.data.node === null) { setBar(1); complete(); }
+      }
       else if (m.type === "execution_error" && m.data && m.data.prompt_id === promptId) fail("Execution error: " + (m.data.exception_message || "see ComfyUI console"));
     };
     ws.onerror = () => {};
   } catch (_) {}
 
   // Polling fallback / source of truth for the finished image.
-  let tries = 0;
   const poll = async () => {
     if (done) return;
-    tries++;
     try {
       const r = await fetch(base + "/history/" + promptId);
       if (r.ok) { const h = await r.json(); if (h[promptId] && h[promptId].outputs && Object.keys(h[promptId].outputs).length) { complete(); return; } }
     } catch (_) {}
-    if (tries > 240) { fail("Timed out waiting for the render."); return; }
+    // Liveness even if the progress websocket never connects (some proxies/CORS
+    // setups drop it): if our prompt is still running or queued, it's alive.
+    try {
+      const q = await fetch(base + "/queue").then(x => x.ok ? x.json() : null).catch(() => null);
+      if (q && [...(q.queue_running || []), ...(q.queue_pending || [])].some(e => Array.isArray(e) && e[1] === promptId)) lastProgressAt = Date.now();
+    } catch (_) {}
+    if (Date.now() - lastProgressAt > STALL_MS) {
+      fail("Render timed out — no progress from ComfyUI for " + Math.round(STALL_MS / 60000) + " min. The server may have stalled or run out of memory; check the ComfyUI console.");
+      return;
+    }
     setTimeout(poll, 1500);
   };
   setTimeout(poll, 1500);
