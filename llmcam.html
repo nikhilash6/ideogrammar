@@ -169,6 +169,20 @@
     <label class="fld">Model (must be vision-capable)</label>
     <input type="text" id="cfgModel" placeholder="anthropic/claude-3.5-sonnet" autocomplete="off">
 
+    <label class="fld">Detail · number of elements</label>
+    <select id="cfgElements">
+      <option value="few">Few (2–3)</option>
+      <option value="balanced">Balanced (3–6)</option>
+      <option value="detailed">Detailed (6–10)</option>
+      <option value="maximal">Maximal (10–16)</option>
+    </select>
+    <label class="fld">Detail · description richness</label>
+    <select id="cfgDesc">
+      <option value="brief">Brief</option>
+      <option value="balanced">Balanced</option>
+      <option value="rich">Rich</option>
+    </select>
+
     <label class="fld">Quality</label>
     <select id="cfgPreset">
       <option value="Turbo">Turbo (12 steps, fastest)</option>
@@ -304,7 +318,7 @@ async function run() {
                           : "Build the structured layout JSON from the attached image.";
     const body = {
       model: cfg.model,
-      messages: [{ role: "system", content: IMAGE_SYSTEM_PROMPT }, { role: "user", content: [{ type: "text", text }, { type: "image_url", image_url: { url: photoDataUrl } }] }],
+      messages: [{ role: "system", content: IMAGE_SYSTEM_PROMPT + detailDirective(cfg) }, { role: "user", content: [{ type: "text", text }, { type: "image_url", image_url: { url: photoDataUrl } }] }],
       temperature: 0.7, response_format: { type: "json_object" }
     };
     const content = await chatCompletion(cfg, headers, body);
@@ -423,6 +437,7 @@ function clearGallery() {
 function openSettings() {
   const cfg = loadCfg();
   $("cfgBaseUrl").value = cfg.baseUrl || ""; $("cfgApiKey").value = cfg.apiKey || ""; $("cfgModel").value = cfg.model || "";
+  $("cfgElements").value = cfg.elements; $("cfgDesc").value = cfg.desc;
   document.querySelectorAll("#providerSeg button").forEach(b => b.classList.toggle("active", b.dataset.p === cfg.provider));
   $("cfgPreset").value = comfyCfg.preset || "Turbo";
   $("cfgMP").value = String(comfyCfg.megapixels || 2);
@@ -431,7 +446,7 @@ function openSettings() {
 }
 function readSettings() {
   const provider = document.querySelector("#providerSeg button.active")?.dataset.p || "openrouter";
-  saveCfg({ provider, baseUrl: $("cfgBaseUrl").value.trim().replace(/\/+$/, ""), apiKey: $("cfgApiKey").value.trim(), model: $("cfgModel").value.trim() });
+  saveCfg({ provider, baseUrl: $("cfgBaseUrl").value.trim().replace(/\/+$/, ""), apiKey: $("cfgApiKey").value.trim(), model: $("cfgModel").value.trim(), elements: $("cfgElements").value, desc: $("cfgDesc").value });
   comfyCfg.preset = $("cfgPreset").value;
   comfyCfg.megapixels = numInRange($("cfgMP").value, 0.1, 16, 2);
   comfyCfg.save = $("cfgSave").checked;

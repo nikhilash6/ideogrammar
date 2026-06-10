@@ -56,7 +56,7 @@ Coordinates are a 1000×1000 space, origin top-left, `bbox = [x1, y1, x2, y2]`.
 
 The **⚙ Settings** button (header) opens one dialog for everything not tied to a specific render:
 
-- **Text-generation model (LLM)** — provider (OpenRouter / local llama.cpp), base URL, API key, model. **Save named presets** of these so switching endpoints doesn't lose the model name — pick a preset from the dropdown to restore it.
+- **Text-generation model (LLM)** — provider (OpenRouter / local llama.cpp), base URL, API key, model, and a **Detail** control (how many elements the model breaks the scene into, and how verbose each element's description is). **Save named presets** of these so switching endpoints doesn't lose the model name — pick a preset from the dropdown to restore it.
 - **Vectorizer** — mask method (SAM / heuristic / none) and flatness threshold.
 - **Setups & library** — save/load/delete named **setups** (the full prompt builder state + render parameters).
 

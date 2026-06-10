@@ -22,9 +22,32 @@ function loadCfg() {
   let cfg;
   try { cfg = JSON.parse(localStorage.getItem(CFG_KEY)); } catch (_) {}
   if (!cfg || typeof cfg !== "object") cfg = { provider: "openrouter", baseUrl: PROVIDER_DEFAULTS.openrouter.baseUrl, apiKey: "", model: PROVIDER_DEFAULTS.openrouter.model };
+  if (!ELEMENT_LEVELS[cfg.elements]) cfg.elements = "balanced";   // detail: how many elements
+  if (!DESC_LEVELS[cfg.desc]) cfg.desc = "balanced";             // detail: how verbose each desc
   return cfg;
 }
 function saveCfg(cfg) { localStorage.setItem(CFG_KEY, JSON.stringify(cfg)); }
+
+/* ---- generation "detail" controls (element count + description richness) ---- */
+const ELEMENT_LEVELS = {
+  few:      { label: "Few (2–3)",       rule: "Decompose the scene into only 2 to 3 elements — just the most important parts." },
+  balanced: { label: "Balanced (3–6)",  rule: "Decompose the scene into 3 to 6 elements." },
+  detailed: { label: "Detailed (6–10)", rule: "Decompose the scene into 6 to 10 elements, breaking it into more distinct parts." },
+  maximal:  { label: "Maximal (10–16)", rule: "Decompose the scene into 10 to 16 elements, breaking it very finely into many distinct parts." }
+};
+const DESC_LEVELS = {
+  brief:    { label: "Brief",    rule: "Keep each element's desc to a short phrase of a few words." },
+  balanced: { label: "Balanced", rule: "Write each element's desc as one concrete, specific sentence." },
+  rich:     { label: "Rich",     rule: "Write each element's desc as a vivid, richly detailed 1–2 sentences covering materials, textures, colors and spatial relations." }
+};
+// Instruction appended to the system prompt for fresh generation (text or image)
+// so the model honors the user's chosen element count and description richness.
+function detailDirective(cfg) {
+  cfg = cfg || loadCfg();
+  const e = ELEMENT_LEVELS[cfg.elements] || ELEMENT_LEVELS.balanced;
+  const d = DESC_LEVELS[cfg.desc] || DESC_LEVELS.balanced;
+  return `\n\nDETAIL SETTINGS (these override any element-count or description guidance above):\n- ${e.rule}\n- ${d.rule}`;
+}
 
 /* ---- system prompts ---- */
 const SYSTEM_PROMPT = `You are a layout designer that turns a natural-language image description into a structured JSON "prompt" for the Ideogram 4 image model.

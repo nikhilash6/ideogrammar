@@ -730,7 +730,26 @@
           <input type="text" id="cfgApiKey" placeholder="sk-or-..." autocomplete="off">
           <label>Model</label>
           <input type="text" id="cfgModel" placeholder="anthropic/claude-3.5-sonnet">
-          <div class="hint">Saved in this browser only. Save a preset per endpoint so switching providers doesn't lose the model name.</div>
+          <div class="row2" style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+            <div>
+              <label>Detail · elements</label>
+              <select id="cfgElements">
+                <option value="few">Few (2–3)</option>
+                <option value="balanced">Balanced (3–6)</option>
+                <option value="detailed">Detailed (6–10)</option>
+                <option value="maximal">Maximal (10–16)</option>
+              </select>
+            </div>
+            <div>
+              <label>Detail · descriptions</label>
+              <select id="cfgDesc">
+                <option value="brief">Brief</option>
+                <option value="balanced">Balanced</option>
+                <option value="rich">Rich</option>
+              </select>
+            </div>
+          </div>
+          <div class="hint">Detail controls how many elements the model breaks the scene into and how verbose each element's description is (applies when generating from text or an image). Saved in this browser only. Save a preset per endpoint so switching providers doesn't lose the model name.</div>
         </div>
       </details>
 
@@ -1462,12 +1481,14 @@ function applyCfgToForm() {
   $("cfgBaseUrl").value = cfg.baseUrl || "";
   $("cfgApiKey").value = cfg.apiKey || "";
   $("cfgModel").value = cfg.model || "";
+  $("cfgElements").value = cfg.elements;
+  $("cfgDesc").value = cfg.desc;
   document.querySelectorAll("#providerSeg button").forEach(b => b.classList.toggle("active", b.dataset.p === cfg.provider));
 }
 
 function readCfgFromForm() {
   const provider = document.querySelector("#providerSeg button.active")?.dataset.p || "openrouter";
-  const cfg = { provider, baseUrl: $("cfgBaseUrl").value.trim().replace(/\/+$/, ""), apiKey: $("cfgApiKey").value.trim(), model: $("cfgModel").value.trim() };
+  const cfg = { provider, baseUrl: $("cfgBaseUrl").value.trim().replace(/\/+$/, ""), apiKey: $("cfgApiKey").value.trim(), model: $("cfgModel").value.trim(), elements: $("cfgElements").value, desc: $("cfgDesc").value };
   saveCfg(cfg);
   return cfg;
 }
@@ -1514,6 +1535,7 @@ async function runGeneration() {
     systemContent = SYSTEM_PROMPT;
     userContent = "Description:\n" + userPrompt;
   }
+  systemContent += detailDirective(cfg);   // honor the element-count / description-detail settings
 
   const body = {
     model: cfg.model,
