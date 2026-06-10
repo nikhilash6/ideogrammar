@@ -319,9 +319,13 @@
   /* ---------- gridstack tiled windows ---------- */
   .grid-stack { flex: 1; min-height: 0; overflow: auto; padding: 4px; }
   .grid-stack-item-content { overflow: hidden; inset: 0; }
-  /* GridStack injects a per-grid stylesheet (.gs-id-N) that sets the content
-     inset to the 5px margin; out-specify it (extra `body`) so top wins. */
-  body .grid-stack > .grid-stack-item > .grid-stack-item-content { top: 10px; }
+  /* GridStack's injected per-grid stylesheet (.gs-id-N) gives the content a
+     fixed height equal to the full cell span, which makes its `bottom` inset a
+     no-op — so adjacent tiles end up touching. Force height:auto and a real
+     inset (out-specified with `body`) so top+bottom create an even 5px gap. */
+  body .grid-stack > .grid-stack-item > .grid-stack-item-content {
+    inset: 2.5px !important; height: auto !important;
+  }
   .tile { display: flex; flex-direction: column; height: 100%;
     background: linear-gradient(180deg, var(--panel), var(--panel-2));
     border: 1px solid var(--border); border-radius: var(--r); overflow: hidden; }
