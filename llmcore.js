@@ -46,7 +46,7 @@ const DESC_LEVELS = {
    and changes only what's depicted — usable both as image-generation guidance
    and as a Refine change-request on an existing setup. */
 const STYLE_PRESETS = {
-  faithful: { label: null, options: null, guide: () => "Re-create this exact scene faithfully, same composition." },
+  faithful: { label: null, options: null, guide: () => "Render this exact scene naturally and photo-realistically with no added artistic style or stylization; keep the same composition, framing and element positions." },
   time: {
     label: "Era", options: ["Mesopotamia", "Babylon", "Ancient Egypt", "Ancient Rome", "Medieval", "Renaissance", "Victorian (1890s)", "Roaring 1920s", "1950s Americana", "1970s", "1980s", "1990s", "2000s", "2010s", "Cyberpunk near-future", "Far future / sci-fi"],
     guide: v => `Time travel: keep the exact same composition, framing and element positions, but depict the scene as a period-accurate ${v} version — adjust clothing, technology, vehicles, architecture, materials and color treatment to that era.`

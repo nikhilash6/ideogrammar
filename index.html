@@ -710,6 +710,7 @@
       <div class="row2" style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
         <select id="refineStyleMode">
           <option value="">— choose a transform —</option>
+          <option value="faithful">↩ Faithful (revert to photo-real)</option>
           <option value="time">⏳ Time travel</option>
           <option value="style">🎨 Art style</option>
           <option value="genre">🎭 Genre / mood</option>
@@ -1615,6 +1616,11 @@ function setGenImage(file) {
     const cv = document.createElement("canvas"); cv.width = w; cv.height = h;
     cv.getContext("2d").drawImage(img, 0, 0, w, h);
     genImageDataUrl = cv.toDataURL("image/jpeg", 0.9);
+    // Match the output aspect ratio to the uploaded image (like LLMCam does).
+    comfyCfg.aspect_ratio = nearestAspect(img.naturalWidth / img.naturalHeight);
+    saveComfyCfg();
+    if ($("cf-aspect")) $("cf-aspect").value = comfyCfg.aspect_ratio;
+    applyCanvasAspect();
     $("genImageThumb").src = genImageDataUrl;
     const kb = Math.round(genImageDataUrl.length * 0.75 / 1024);
     $("genImageName").textContent = file.name + " · " + img.naturalWidth + "×" + img.naturalHeight + (scale < 1 ? " → " + w + "×" + h : "") + " · ~" + kb + " KB";
@@ -1639,6 +1645,7 @@ function openRefineModal() {
   setRefineStatus("", "");
   $("refineRenderRun").style.display = comfyCfg.mode === "comfy" ? "inline-flex" : "none";
   $("refineStyleMode").value = ""; $("refineStyleSub").style.display = "none";
+  $("refinePrompt").value = "";   // start fresh — don't re-apply the previous refine's text/style
   $("refineOverlay").classList.add("show"); $("refinePrompt").focus();
 }
 // Style-preset picker: fills the change-request with the chosen preset's guidance.
@@ -1651,6 +1658,7 @@ function refineStyleSync() {
 // change reset the sub back to the first option, so keep it to mode changes.)
 function refineModeChanged() {
   const m = $("refineStyleMode").value, subSel = $("refineStyleSub");
+  if (!m) { subSel.style.display = "none"; $("refinePrompt").value = ""; return; }  // back to "— choose —": drop the style text
   const p = STYLE_PRESETS[m];
   if (p && p.options) {
     subSel.innerHTML = p.options.map(o => `<option value="${o}">${o}</option>`).join("");
