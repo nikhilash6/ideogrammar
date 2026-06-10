@@ -85,7 +85,8 @@ Click **🪄 Refine** to adjust the *current* setup with a natural-language chan
 - **Capture** uses the phone's native camera (`<input capture>`) or the gallery — works over plain LAN HTTP (the live-camera API needs HTTPS, so it's intentionally not used).
 - **Transformations**: *Faithful* (same scene, Ideogram render), *Time travel* (period-accurate eras), *Art style* (oil/anime/pixel/…), *Genre / mood* (cyberpunk/noir/fantasy/…), plus a free-text box. Each keeps the original composition and changes only what's depicted.
 - **Aspect** auto-matches the photo's orientation by default.
-- It **shares the same `localStorage` config** as the main editor (LLM provider/key/model, quality preset), and reaches ComfyUI through the proxy that served the page — so there's nothing extra to configure if the main app already works on that device. Needs a **vision-capable** model.
+- **Gallery** — every render is kept in a thumbnail strip; tap one to reopen it (with Save/Share). Permanently-saved renders persist across reloads (its own `localStorage`, separate from the editor's gallery).
+- It **shares the same engine and `localStorage` config** as the main editor (both load [`llmcore.js`](llmcore.js); LLM provider/key/model, quality preset), and reaches ComfyUI through the proxy that served the page — so there's nothing extra to configure if the main app already works on that device. Needs a **vision-capable** model.
 
 ## Setups & library
 
@@ -284,8 +285,9 @@ The **Test connection** button in the ComfyUI panel pings `/system_stats` and re
 
 | File | Purpose |
 |------|---------|
-| [`index.html`](index.html) | The entire app — editor, canvas, LLM generation, ComfyUI mode. |
-| [`llmcam.html`](llmcam.html) | Phone-first camera app — take a photo, transform it (time travel / art style / genre / faithful), render through Ideogram, save/share. Served by the proxy at `/llmcam.html`. |
+| [`index.html`](index.html) | The main app — editor, canvas, LLM generation, ComfyUI mode. |
+| [`llmcore.js`](llmcore.js) | Shared engine for both pages: ComfyUI workflow template, resolution/prompt building, the LLM call, config, and the render plumbing. Loaded by `index.html` and `llmcam.html`. |
+| [`llmcam.html`](llmcam.html) | Phone-first camera app — take a photo, transform it (time travel / art style / genre / faithful), render through Ideogram, with a gallery and save/share. Served by the proxy at `/llmcam.html`. |
 | [`comfy_proxy.py`](comfy_proxy.py) | Stdlib proxy: serves the page + local asset files (e.g. `vendor/`), forwards HTTP and the WebSocket to ComfyUI (same-origin, no CORS flags), and hosts the `/vectorize` endpoint (optional `vtracer`/`pillow` deps) plus `/ideogrammar/outputs` (gallery recovery; needs `--output-dir`). |
 | [`comfy_proxy.sh`](comfy_proxy.sh) | start/stop/status/restart/logs helper, plus `install-service`/`uninstall-service` to run it as a background systemd service. |
 | [`comfy_proxy.env.example`](comfy_proxy.env.example) | Template for `comfy_proxy.env` (untracked) — set your ComfyUI address/host/port there instead of in the tracked code. |
