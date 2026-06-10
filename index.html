@@ -691,12 +691,23 @@
         <button type="button" class="chip" data-refine="Make the color palette cooler.">Cooler palette</button>
         <button type="button" class="chip" data-refine="Make the main subject larger and more central.">Bigger subject</button>
       </div>
+      <label style="margin-top:12px;">Style preset <span style="color:var(--faint)">(re-style while keeping the composition)</span></label>
+      <div class="row2" style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+        <select id="refineStyleMode">
+          <option value="">— choose a transform —</option>
+          <option value="time">⏳ Time travel</option>
+          <option value="style">🎨 Art style</option>
+          <option value="genre">🎭 Genre / mood</option>
+        </select>
+        <select id="refineStyleSub" style="display:none;"></select>
+      </div>
       <div class="hint" style="margin-top:8px;">Press ⌘/Ctrl + Enter to apply. You can edit everything afterwards.</div>
     </div>
     <div class="modal-foot">
       <span class="status" id="refineStatus"></span>
       <button id="refineCancel">Cancel</button>
       <button class="primary" id="refineRun">Refine</button>
+      <button id="refineRenderRun" title="Apply the change and render it on ComfyUI" style="display:none;">🎨 Refine &amp; Render</button>
     </div>
   </div>
 </div>
@@ -1595,11 +1606,27 @@ function clearGenImage() {
 
 let refining = false;
 function setRefineStatus(html, cls) { const s = $("refineStatus"); s.innerHTML = html; s.className = "status" + (cls ? " " + cls : ""); }
-function openRefineModal() { setRefineStatus("", ""); $("refineOverlay").classList.add("show"); $("refinePrompt").focus(); }
+function openRefineModal() {
+  setRefineStatus("", "");
+  $("refineRenderRun").style.display = comfyCfg.mode === "comfy" ? "inline-flex" : "none";
+  $("refineStyleMode").value = ""; $("refineStyleSub").style.display = "none";
+  $("refineOverlay").classList.add("show"); $("refinePrompt").focus();
+}
+// Style-preset picker: fills the change-request with the chosen preset's guidance.
+function refineStyleChanged() {
+  const m = $("refineStyleMode").value, subSel = $("refineStyleSub");
+  const p = STYLE_PRESETS[m];
+  if (p && p.options) {
+    subSel.innerHTML = p.options.map(o => `<option value="${o}">${o}</option>`).join("");
+    subSel.style.display = "";
+  } else subSel.style.display = "none";
+  if (m) $("refinePrompt").value = styleGuidance(m, subSel.value);
+}
 function closeRefineModal() { $("refineOverlay").classList.remove("show"); }
 
-async function runRefine() {
+async function runRefine(opts) {
   if (refining) return;
+  opts = opts || {};
   const cfg = loadCfg();
   const instruction = $("refinePrompt").value.trim();
   if (!instruction) { setRefineStatus("Describe the change first.", "err"); return; }
@@ -1608,7 +1635,7 @@ async function runRefine() {
   if (cfg.provider === "openrouter" && !cfg.apiKey) { setRefineStatus("OpenRouter needs an API key (⚙ Settings).", "err"); openSettings(); return; }
 
   refining = true;
-  $("refineRun").disabled = true;
+  $("refineRun").disabled = $("refineRenderRun").disabled = true;
   setRefineStatus('<span class="spinner"></span>Refining…', "");
 
   const headers = { "Content-Type": "application/json" };
@@ -1639,14 +1666,15 @@ async function runRefine() {
     render();
     setRefineStatus("Refined ✓", "ok");
     toast("Setup refined ✓", "ok");
-    setTimeout(closeRefineModal, 600);
+    if (opts.thenRender && comfyCfg.mode === "comfy") { closeRefineModal(); comfyRender(); }
+    else setTimeout(closeRefineModal, 600);
   } catch (err) {
     let msg = err.message || String(err);
     if (err instanceof TypeError) msg = "Network/CORS error reaching " + cfg.baseUrl + ". Check the URL, that the server is running, and that CORS is allowed.";
     setRefineStatus(msg, "err");
   } finally {
     refining = false;
-    $("refineRun").disabled = false;
+    $("refineRun").disabled = $("refineRenderRun").disabled = false;
   }
 }
 
@@ -1770,7 +1798,10 @@ $("genImageDrop").addEventListener("drop", e => {
 $("refineBtn").addEventListener("click", openRefineModal);
 $("refineClose").addEventListener("click", closeRefineModal);
 $("refineCancel").addEventListener("click", closeRefineModal);
-$("refineRun").addEventListener("click", runRefine);
+$("refineRun").addEventListener("click", () => runRefine());
+$("refineRenderRun").addEventListener("click", () => runRefine({ thenRender: true }));
+$("refineStyleMode").addEventListener("change", refineStyleChanged);
+$("refineStyleSub").addEventListener("change", refineStyleChanged);
 let refinePressedSelf = false;
 $("refineOverlay").addEventListener("mousedown", e => { refinePressedSelf = (e.target === $("refineOverlay")); });
 $("refineOverlay").addEventListener("click", e => { if (e.target === $("refineOverlay") && refinePressedSelf) closeRefineModal(); });

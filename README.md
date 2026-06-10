@@ -76,7 +76,7 @@ Then click **✨ Generate prompt**, describe the image, and the model returns th
 
 ## Refine (LLM)
 
-Click **🪄 Refine** to adjust the *current* setup with a natural-language change instead of starting over. Describe a change (e.g. "make it a lighter composition", "move the title to the bottom", "swap the palette to autumn tones") and the model rewrites the **entire** setup — style, background and every positioned element — to reflect it while preserving everything the request doesn't touch. Per-element vectorize modes are carried over by position. Quick-suggestion chips are provided. You can also refine straight from a render: open it in the viewer and press **🪄 Refine** to load that render's setup and adjust it.
+Click **🪄 Refine** to adjust the *current* setup with a natural-language change instead of starting over. Describe a change (e.g. "make it a lighter composition", "move the title to the bottom", "swap the palette to autumn tones") and the model rewrites the **entire** setup — style, background and every positioned element — to reflect it while preserving everything the request doesn't touch. Per-element vectorize modes are carried over by position. Quick-suggestion chips are provided, plus the same **style presets** as LLMCam — *Time travel* (eras), *Art style*, *Genre / mood* — which fill in a composition-preserving change request. In ComfyUI mode a **🎨 Refine & Render** button applies the change and renders it in one step. You can also refine straight from a render: open it in the viewer and press **🪄 Refine** to load that render's setup and adjust it.
 
 ## LLMCam (mobile camera app)
 

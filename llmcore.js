@@ -40,6 +40,31 @@ const DESC_LEVELS = {
   balanced: { label: "Balanced", rule: "Write each element's desc as one concrete, specific sentence." },
   rich:     { label: "Rich",     rule: "Write each element's desc as a vivid, richly detailed 1–2 sentences covering materials, textures, colors and spatial relations." }
 };
+/* ---- style presets (shared by LLMCam capture + the editor's Refine) ----
+   Each guide() returns a plain-language instruction that preserves composition
+   and changes only what's depicted — usable both as image-generation guidance
+   and as a Refine change-request on an existing setup. */
+const STYLE_PRESETS = {
+  faithful: { label: null, options: null, guide: () => "Re-create this exact scene faithfully, same composition." },
+  time: {
+    label: "Era", options: ["Ancient Rome", "Medieval", "Renaissance", "Victorian (1890s)", "Roaring 1920s", "1950s Americana", "1980s", "Cyberpunk near-future", "Far future / sci-fi"],
+    guide: v => `Time travel: keep the exact same composition, framing and element positions, but depict the scene as a period-accurate ${v} version — adjust clothing, technology, vehicles, architecture, materials and color treatment to that era.`
+  },
+  style: {
+    label: "Style", options: ["Oil painting", "Watercolor", "Anime", "Pixel art", "Comic book", "3D render", "Pencil sketch", "Pop art", "Low-poly", "Claymation"],
+    guide: v => `Re-render the scene in this medium/style: ${v}. Keep the exact same composition and layout; only change the rendering style.`
+  },
+  genre: {
+    label: "Genre / mood", options: ["Cyberpunk", "Film noir", "High fantasy", "Post-apocalyptic", "Vaporwave", "Steampunk", "Horror", "Solarpunk", "Western", "Fairy tale"],
+    guide: v => `Re-theme the scene as ${v}. Keep the exact same composition and layout; restyle the content, lighting and mood to match the theme.`
+  }
+};
+function styleGuidance(modeKey, subValue) {
+  const p = STYLE_PRESETS[modeKey];
+  if (!p || !p.guide) return "";
+  return p.options ? p.guide(subValue) : p.guide();
+}
+
 // Instruction appended to the system prompt for fresh generation (text or image)
 // so the model honors the user's chosen element count and description richness.
 function detailDirective(cfg) {
