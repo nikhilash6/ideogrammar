@@ -73,7 +73,7 @@ Any other OpenAI-compatible endpoint works too — just set the base URL to the 
 
 Then click **✨ Generate prompt**, describe the image, and the model returns the full schema, which you can edit visually. Settings/presets are saved in your browser only.
 
-**From an image.** In the same dialog you can **click or drag-drop a reference image** (up to 8 MB) instead of, or alongside, the text. The model reads the image's subject, style, lighting, colors and any literal text, then reconstructs it as a full editable setup — estimating each element's position on the 1000×1000 canvas. The text box, when used together with an image, acts as extra guidance. This needs a **vision-capable model** (e.g. `anthropic/claude-3.5-sonnet`, `openai/gpt-4o`); a text-only model will reject the image.
+**From an image.** In the same dialog you can **click or drag-drop a reference image** instead of, or alongside, the text (large photos are downscaled automatically, so size isn't a concern). The model reads the image's subject, style, lighting, colors and any literal text, then reconstructs it as a full editable setup — estimating each element's position on the 1000×1000 canvas. The text box, when used together with an image, acts as extra guidance. This needs a **vision-capable model** (e.g. `anthropic/claude-3.5-sonnet`, `openai/gpt-4o`); a text-only model will reject the image.
 
 ## Refine (LLM)
 

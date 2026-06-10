@@ -435,6 +435,16 @@ function cmpUpdate(e) {
   if (r.width) setCompare((e.clientX - r.left) / r.width * 100);
 }
 
+// A unique, timestamped name per generation so downloads don't all collide as
+// "llmcam.png"; keeps the render's real extension.
+function downloadName(entry) {
+  const d = new Date(entry && entry.ts ? entry.ts : Date.now());
+  const p = n => String(n).padStart(2, "0");
+  const stamp = `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`;
+  const ext = (entry && entry.filename && entry.filename.match(/\.[a-z0-9]+$/i) || [".png"])[0];
+  return `llmcam-${stamp}${ext}`;
+}
+
 let lastBlobUrl = null;
 async function showEntry(entry) {
   const url = viewUrl(entry);
@@ -444,6 +454,7 @@ async function showEntry(entry) {
   lastBlobUrl = blob ? blobUrl : null;
   $("cmpAfter").src = blobUrl;
   $("downloadBtn").href = blobUrl;
+  $("downloadBtn").download = downloadName(entry);
   const before = entry._before;
   $("compare").classList.toggle("no-before", !before);
   $("cmpHint").style.display = before ? "" : "none";
@@ -454,7 +465,7 @@ async function showEntry(entry) {
   $("shareBtn").onclick = async () => {
     try {
       if (blob && navigator.canShare) {
-        const file = new File([blob], "llmcam.png", { type: blob.type || "image/png" });
+        const file = new File([blob], downloadName(entry), { type: blob.type || "image/png" });
         if (navigator.canShare({ files: [file] })) { await navigator.share({ files: [file], title: "LLMCam" }); return; }
       }
       if (navigator.share) { await navigator.share({ title: "LLMCam", url }); return; }

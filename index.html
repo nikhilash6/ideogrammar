@@ -1598,22 +1598,32 @@ function setGenStatus(html, cls) { const s = $("genStatus"); s.innerHTML = html;
 function openGenModal() { applyCfgToForm(); setGenStatus("", ""); $("genOverlay").classList.add("show"); $("genPrompt").focus(); }
 function closeGenModal() { $("genOverlay").classList.remove("show"); }
 
-const MAX_IMAGE_BYTES = 8 * 1024 * 1024;   // 8 MB cap on the uploaded reference image
+const MAX_IMAGE_BYTES = 50 * 1024 * 1024;   // sanity guard on the raw upload
+const GEN_IMAGE_MAXDIM = 1536;              // large refs are downscaled to this (smaller payload, plenty for vision)
 function setGenImage(file) {
   if (!file) return;
   if (!file.type.startsWith("image/")) { setGenStatus("That file isn't an image.", "err"); return; }
-  if (file.size > MAX_IMAGE_BYTES) { setGenStatus("Image is larger than 8 MB — pick a smaller one.", "err"); return; }
-  const reader = new FileReader();
-  reader.onload = () => {
-    genImageDataUrl = reader.result;
+  if (file.size > MAX_IMAGE_BYTES) { setGenStatus("Image is larger than 50 MB — pick a smaller one.", "err"); return; }
+  // Downscale + re-encode so big photos still work (the vision API only needs a
+  // modest resolution); avoids the old hard byte cap on the raw file.
+  const url = URL.createObjectURL(file);
+  const img = new Image();
+  img.onload = () => {
+    URL.revokeObjectURL(url);
+    const scale = Math.min(1, GEN_IMAGE_MAXDIM / Math.max(img.naturalWidth, img.naturalHeight));
+    const w = Math.round(img.naturalWidth * scale), h = Math.round(img.naturalHeight * scale);
+    const cv = document.createElement("canvas"); cv.width = w; cv.height = h;
+    cv.getContext("2d").drawImage(img, 0, 0, w, h);
+    genImageDataUrl = cv.toDataURL("image/jpeg", 0.9);
     $("genImageThumb").src = genImageDataUrl;
-    $("genImageName").textContent = file.name + " · " + Math.round(file.size / 1024) + " KB";
+    const kb = Math.round(genImageDataUrl.length * 0.75 / 1024);
+    $("genImageName").textContent = file.name + " · " + img.naturalWidth + "×" + img.naturalHeight + (scale < 1 ? " → " + w + "×" + h : "") + " · ~" + kb + " KB";
     $("genImageHint").style.display = "none";
     $("genImagePreview").style.display = "flex";
     setGenStatus("", "");
   };
-  reader.onerror = () => setGenStatus("Could not read that image file.", "err");
-  reader.readAsDataURL(file);
+  img.onerror = () => { URL.revokeObjectURL(url); setGenStatus("Could not read that image file.", "err"); };
+  img.src = url;
 }
 function clearGenImage() {
   genImageDataUrl = null;
