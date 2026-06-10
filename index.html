@@ -2399,14 +2399,23 @@ function addRenderToHistory(entry) {
   renderGallery();
 }
 // Persist only permanent (output/) renders — temp previews would 404 after a reload.
-// Keep up to HIST_MAX; if localStorage rejects the payload (quota), drop the oldest quarter and retry.
+// Keep the reference image (_before) on the most recent few image-sourced renders so
+// the compare slider survives a reload; shed those first (then oldest entries) on quota.
+const BEFORE_PERSIST = 16;   // how many recent renders keep their (heavy) reference image
 function saveRenderHistory() {
-  // Drop _before (a base64 reference image) from the persisted copy — it's a large
-  // in-memory-only field; the compare slider is a current-session affordance.
-  let arr = renderHistory.filter(e => e.type === "output").slice(-HIST_MAX).map(({ _before, ...e }) => e);
-  while (arr.length) {
-    try { localStorage.setItem(HIST_KEY, JSON.stringify(arr)); return; }
-    catch (_) { arr = arr.slice(Math.ceil(arr.length / 4)); }
+  const arr = renderHistory.filter(e => e.type === "output").slice(-HIST_MAX);
+  // Keep _before only on the newest BEFORE_PERSIST renders that have one.
+  const keep = new Set();
+  for (let i = arr.length - 1, n = 0; i >= 0 && n < BEFORE_PERSIST; i--) {
+    if (arr[i]._before) { keep.add(arr[i]); n++; }
+  }
+  let out = arr.map(e => keep.has(e) ? e : (({ _before, ...x }) => x)(e));
+  while (out.length) {
+    try { localStorage.setItem(HIST_KEY, JSON.stringify(out)); return; }
+    catch (_) {
+      if (out.some(e => e._before)) out = out.map(({ _before, ...x }) => x);   // shed reference images first
+      else out = out.slice(Math.ceil(out.length / 4));                          // then oldest entries
+    }
   }
   try { localStorage.setItem(HIST_KEY, "[]"); } catch (_) {}
 }
