@@ -5,12 +5,12 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#0b0f15">
 <title>LLMCam</title>
-<link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2032%2032'%3E%3Crect%20width='32'%20height='32'%20rx='6'%20fill='%236366f1'/%3E%3Ccircle%20cx='16'%20cy='17'%20r='6'%20fill='none'%20stroke='%23fff'%20stroke-width='2.5'/%3E%3Crect%20x='11'%20y='7'%20width='10'%20height='4'%20rx='1.5'%20fill='%23fff'/%3E%3C/svg%3E">
+<link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2032%2032'%3E%3Crect%20width='32'%20height='32'%20rx='6'%20fill='%23f32446'/%3E%3Ccircle%20cx='16'%20cy='17'%20r='6'%20fill='none'%20stroke='%23fff'%20stroke-width='2.5'/%3E%3Crect%20x='11'%20y='7'%20width='10'%20height='4'%20rx='1.5'%20fill='%23fff'/%3E%3C/svg%3E">
 <style>
   :root {
     --bg: #0b0f15; --panel: #141a23; --panel-2: #1a212c; --elevated: #1e2733;
     --border: #243040; --border-strong: #324154; --text: #e8edf3; --muted: #9fb0c3;
-    --faint: #6b7c91; --accent: #6366f1; --accent-2: #a855f7; --accent-hover: #5457e6;
+    --faint: #6b7c91; --accent: #f32446; --accent-2: #ff5c78; --accent-hover: #d81e3c;
     --danger: #ef4444; --success: #34d399; --r: 12px; --r-sm: 9px;
   }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -41,7 +41,7 @@
   }
   button:active { background: #222c3c; }
   button:disabled { opacity: .5; }
-  .primary { background: linear-gradient(135deg, var(--accent), #7c5cf0); border-color: transparent; color: #fff; }
+  .primary { background: linear-gradient(135deg, var(--accent), var(--accent-2)); border-color: transparent; color: #fff; }
   .big { width: 100%; padding: 16px; font-size: 16px; }
   .capture-row { display: flex; gap: 10px; }
   .capture-row label { flex: 1; }
@@ -55,7 +55,7 @@
 
   .seg { display: flex; flex-wrap: wrap; gap: 8px; }
   .seg button { flex: 1; min-width: calc(50% - 4px); padding: 11px 8px; font-size: 14px; background: var(--bg); border-color: var(--border); color: var(--muted); }
-  .seg button.active { background: rgba(99,102,241,.16); border-color: var(--accent); color: var(--text); }
+  .seg button.active { background: rgba(243,36,70,.16); border-color: var(--accent); color: var(--text); }
   label.fld { display: block; font-size: 12px; color: var(--muted); margin: 12px 0 6px; font-weight: 500; }
   select, input[type="text"], input[type="password"], textarea {
     width: 100%; background: var(--bg); color: var(--text); border: 1px solid var(--border);
@@ -174,6 +174,15 @@
       <option value="Turbo">Turbo (12 steps, fastest)</option>
       <option value="Default">Default (20 steps)</option>
       <option value="Quality">Quality (48 steps)</option>
+    </select>
+    <label class="fld">Resolution (megapixels)</label>
+    <select id="cfgMP">
+      <option value="1">1 MP (fastest)</option>
+      <option value="1.5">1.5 MP</option>
+      <option value="2">2 MP</option>
+      <option value="2.5">2.5 MP</option>
+      <option value="3">3 MP</option>
+      <option value="4">4 MP (slowest)</option>
     </select>
     <label class="fld" style="display:flex; align-items:center; gap:10px; margin-top:14px;">
       <input type="checkbox" id="cfgSave" style="width:auto;"> Save renders permanently (keeps the gallery across reloads)
@@ -416,6 +425,7 @@ function openSettings() {
   $("cfgBaseUrl").value = cfg.baseUrl || ""; $("cfgApiKey").value = cfg.apiKey || ""; $("cfgModel").value = cfg.model || "";
   document.querySelectorAll("#providerSeg button").forEach(b => b.classList.toggle("active", b.dataset.p === cfg.provider));
   $("cfgPreset").value = comfyCfg.preset || "Turbo";
+  $("cfgMP").value = String(comfyCfg.megapixels || 2);
   $("cfgSave").checked = !!comfyCfg.save;
   $("settingsOverlay").classList.add("show");
 }
@@ -423,6 +433,7 @@ function readSettings() {
   const provider = document.querySelector("#providerSeg button.active")?.dataset.p || "openrouter";
   saveCfg({ provider, baseUrl: $("cfgBaseUrl").value.trim().replace(/\/+$/, ""), apiKey: $("cfgApiKey").value.trim(), model: $("cfgModel").value.trim() });
   comfyCfg.preset = $("cfgPreset").value;
+  comfyCfg.megapixels = numInRange($("cfgMP").value, 0.1, 16, 2);
   comfyCfg.save = $("cfgSave").checked;
   saveComfyCfg();
 }
