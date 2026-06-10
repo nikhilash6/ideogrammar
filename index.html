@@ -318,6 +318,7 @@
   .img-bar a:hover, .img-bar button:hover { background: #222c3c; }
   /* before/after compare in the viewer (only for renders made from a reference image) */
   .img-cmp { position: relative; line-height: 0; justify-self: center; touch-action: none; user-select: none; -webkit-user-select: none; }
+  .img-cmp.cmp-on img { -webkit-user-drag: none; user-drag: none; }
   .img-cmp.cmp-on { cursor: ew-resize; }
   #imgFullBefore { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; border-radius: var(--r); display: none; }
   .img-cmp.cmp-on #imgFullBefore { display: block; }
@@ -835,8 +836,8 @@
   <div class="img-modal">
     <button class="img-arrow prev" id="imgPrev" title="Previous (←)">‹</button>
     <div class="img-cmp" id="imgCmp">
-      <img id="imgFull" alt="render">
-      <img id="imgFullBefore" alt="original reference">
+      <img id="imgFull" alt="render" draggable="false">
+      <img id="imgFullBefore" alt="original reference" draggable="false">
       <div class="img-cmp-divider" id="imgCmpDivider"><div class="img-cmp-handle">⇆</div></div>
       <span class="img-cmp-tag img-cmp-tag-l">Original</span>
       <span class="img-cmp-tag img-cmp-tag-r">Render</span>
@@ -2938,7 +2939,8 @@ $("layoutPreset").addEventListener("change", e => applyPreset(e.target.value));
 $("renderImg").addEventListener("click", () => { if (renderHistory.length) openImgModal(renderHistory.length - 1); });
 $("imgPrev").addEventListener("click", () => stepImg(-1));
 $("imgNext").addEventListener("click", () => stepImg(1));
-$("imgCmp").addEventListener("pointerdown", e => { if (!imgCmpOn) return; imgCmpDragging = true; try { $("imgCmp").setPointerCapture(e.pointerId); } catch (_) {} imgCmpUpdate(e); });
+$("imgCmp").addEventListener("pointerdown", e => { if (!imgCmpOn) return; e.preventDefault(); imgCmpDragging = true; try { $("imgCmp").setPointerCapture(e.pointerId); } catch (_) {} imgCmpUpdate(e); });
+$("imgCmp").addEventListener("dragstart", e => e.preventDefault());
 $("imgCmp").addEventListener("pointermove", e => { if (imgCmpDragging) imgCmpUpdate(e); });
 $("imgCmp").addEventListener("pointerup", () => { imgCmpDragging = false; });
 $("imgCmp").addEventListener("pointercancel", () => { imgCmpDragging = false; });
