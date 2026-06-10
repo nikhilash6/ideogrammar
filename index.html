@@ -2354,6 +2354,7 @@ async function showResult(base, promptId) {
   el.onload = () => { el.style.display = "block"; $("renderPlaceholder").style.display = "none"; updateBackdrop(); };
   el.onerror = () => setRenderStatus("Image rendered but could not be loaded from " + comfyBase() + "/view", "err");
   el.src = viewUrl(entry);
+  previewRenderRef = { filename: entry.filename, subfolder: entry.subfolder || "" };   // inline preview now shows this render
   setRenderStatus("Done ✓ · seed " + comfyCfg.seed + (comfyCfg.save ? " · saved" : ""), "ok");
   toast("Render complete ✓", "ok");
   addRenderToHistory(entry);
@@ -2362,7 +2363,16 @@ async function showResult(base, promptId) {
 /* ---- render gallery + full-image viewer (session history) ---- */
 const renderHistory = [];
 let viewerIndex = 0;
-let previewIndex = -1;   // history entry shown in the inline preview tile (what clicking it opens); -1 = newest
+let previewRenderRef = null;   // {filename, subfolder} currently shown in the inline preview tile (what clicking it opens)
+// Most-recent history index for a render reference (filename+subfolder), or -1.
+function historyIndexOf(ref) {
+  if (!ref || !ref.filename) return -1;
+  for (let i = renderHistory.length - 1; i >= 0; i--) {
+    const it = renderHistory[i];
+    if (it.filename === ref.filename && (it.subfolder || "") === (ref.subfolder || "")) return i;
+  }
+  return -1;
+}
 let gallerySort = "newest";           // "newest" | "oldest" — order by creation date
 const HIST_KEY = "ideogram_comfy_history";
 const HIST_MAX = 300;                 // most permanent renders kept in localStorage (trimmed further only on quota)
@@ -2384,7 +2394,6 @@ function sortedIndices() {
 function addRenderToHistory(entry) {
   renderHistory.push(entry);
   viewerIndex = renderHistory.length - 1;
-  previewIndex = -1;   // the inline preview now shows this newest render
   saveRenderHistory();
   galleryPage = 0;   // jump to the page that shows the newest render
   renderGallery();
@@ -2767,6 +2776,7 @@ function findRenderForSetup(s) {
 // a setup). Clears to the placeholder when there's no image to show.
 function showRenderInPreview(ref) {
   const el = $("renderImg");
+  previewRenderRef = (ref && ref.filename) ? { filename: ref.filename, subfolder: ref.subfolder || "" } : null;
   if (!ref || !ref.filename || !comfyBase()) {
     el.style.display = "none"; el.removeAttribute("src");
     $("renderPlaceholder").style.display = "";
@@ -2802,13 +2812,12 @@ function applySetup(s) {
   applyCanvasAspect();
   render();
   const ref = findRenderForSetup(s);
-  showRenderInPreview(ref);
-  // Point the inline preview at the matching history render and, if we have the
-  // reference image, attach it so opening that render shows the compare slider.
-  previewIndex = -1;
-  if (ref && ref.filename) {
-    const idx = renderHistory.findIndex(it => it.filename === ref.filename && (it.subfolder || "") === (ref.subfolder || ""));
-    if (idx >= 0) { previewIndex = idx; if (sourceImageDataUrl) renderHistory[idx]._before = sourceImageDataUrl; }
+  showRenderInPreview(ref);   // records previewRenderRef so clicking the preview opens this render
+  // If we have the reference image, attach it to the matching history render so
+  // opening it (preview or film strip) shows the compare slider.
+  if (ref && ref.filename && sourceImageDataUrl) {
+    const idx = historyIndexOf(ref);
+    if (idx >= 0) renderHistory[idx]._before = sourceImageDataUrl;
   }
   toast("Setup loaded ✓", "ok");
 }
@@ -2958,7 +2967,7 @@ $("layoutPreset").addEventListener("change", e => applyPreset(e.target.value));
   $("canvasControls").addEventListener(ev, e => e.stopPropagation()));
 
 // image viewer modal
-$("renderImg").addEventListener("click", () => { if (renderHistory.length) openImgModal(previewIndex >= 0 && previewIndex < renderHistory.length ? previewIndex : renderHistory.length - 1); });
+$("renderImg").addEventListener("click", () => { if (!renderHistory.length) return; const idx = historyIndexOf(previewRenderRef); openImgModal(idx >= 0 ? idx : renderHistory.length - 1); });
 $("imgPrev").addEventListener("click", () => stepImg(-1));
 $("imgNext").addEventListener("click", () => stepImg(1));
 $("imgCmp").addEventListener("pointerdown", e => { if (!imgCmpOn) return; e.preventDefault(); imgCmpDragging = true; try { $("imgCmp").setPointerCapture(e.pointerId); } catch (_) {} imgCmpUpdate(e); });
