@@ -1,0 +1,658 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#0b0f15">
+<title>LLMCam</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2032%2032'%3E%3Crect%20width='32'%20height='32'%20rx='6'%20fill='%236366f1'/%3E%3Ccircle%20cx='16'%20cy='17'%20r='6'%20fill='none'%20stroke='%23fff'%20stroke-width='2.5'/%3E%3Crect%20x='11'%20y='7'%20width='10'%20height='4'%20rx='1.5'%20fill='%23fff'/%3E%3C/svg%3E">
+<style>
+  :root {
+    --bg: #0b0f15; --panel: #141a23; --panel-2: #1a212c; --elevated: #1e2733;
+    --border: #243040; --border-strong: #324154; --text: #e8edf3; --muted: #9fb0c3;
+    --faint: #6b7c91; --accent: #6366f1; --accent-2: #a855f7; --accent-hover: #5457e6;
+    --danger: #ef4444; --success: #34d399; --r: 12px; --r-sm: 9px;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; }
+  body {
+    background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    min-height: 100vh; padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom);
+    -webkit-font-smoothing: antialiased;
+  }
+  header {
+    display: flex; align-items: center; gap: 10px; padding: 14px 16px;
+    position: sticky; top: 0; background: rgba(11,15,21,.85); backdrop-filter: blur(8px);
+    border-bottom: 1px solid var(--border); z-index: 10;
+  }
+  header .logo { width: 30px; height: 30px; border-radius: 7px; background: linear-gradient(135deg, var(--accent), var(--accent-2)); display: grid; place-items: center; font-size: 17px; }
+  header h1 { font-size: 17px; margin: 0; font-weight: 700; letter-spacing: .2px; flex: 1; }
+  header h1 span { color: var(--faint); font-weight: 400; font-size: 12px; }
+  main { padding: 16px; max-width: 640px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: var(--r); padding: 14px; }
+  .card h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 0 0 10px; font-weight: 600; }
+
+  button, .btn {
+    font-family: inherit; font-size: 15px; font-weight: 600; cursor: pointer;
+    background: var(--elevated); color: var(--text); border: 1px solid var(--border-strong);
+    border-radius: var(--r-sm); padding: 12px 16px; transition: background .14s, border-color .14s;
+    display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  }
+  button:active { background: #222c3c; }
+  button:disabled { opacity: .5; }
+  .primary { background: linear-gradient(135deg, var(--accent), #7c5cf0); border-color: transparent; color: #fff; }
+  .big { width: 100%; padding: 16px; font-size: 16px; }
+  .capture-row { display: flex; gap: 10px; }
+  .capture-row label { flex: 1; }
+  input[type="file"] { display: none; }
+
+  .photo-wrap { position: relative; margin-top: 12px; border-radius: var(--r-sm); overflow: hidden; border: 1px solid var(--border); background: #000; display: none; }
+  .photo-wrap.show { display: block; }
+  .photo-wrap img { width: 100%; display: block; max-height: 42vh; object-fit: contain; }
+  .photo-wrap .meta { position: absolute; left: 8px; bottom: 8px; font-size: 11px; color: #fff; background: rgba(0,0,0,.55); padding: 3px 8px; border-radius: 6px; }
+  .photo-wrap .clear { position: absolute; top: 8px; right: 8px; width: 32px; height: 32px; padding: 0; border-radius: 50%; background: rgba(0,0,0,.55); border: none; font-size: 18px; color: #fff; }
+
+  .seg { display: flex; flex-wrap: wrap; gap: 8px; }
+  .seg button { flex: 1; min-width: calc(50% - 4px); padding: 11px 8px; font-size: 14px; background: var(--bg); border-color: var(--border); color: var(--muted); }
+  .seg button.active { background: rgba(99,102,241,.16); border-color: var(--accent); color: var(--text); }
+  label.fld { display: block; font-size: 12px; color: var(--muted); margin: 12px 0 6px; font-weight: 500; }
+  select, input[type="text"], input[type="password"], textarea {
+    width: 100%; background: var(--bg); color: var(--text); border: 1px solid var(--border);
+    border-radius: var(--r-sm); padding: 12px; font-size: 15px; font-family: inherit;
+  }
+  textarea { resize: vertical; min-height: 52px; line-height: 1.4; }
+  .hint { font-size: 12px; color: var(--faint); margin-top: 8px; line-height: 1.5; }
+
+  .progress { height: 7px; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; overflow: hidden; margin-top: 12px; display: none; }
+  .progress.show { display: block; }
+  .progress > div { height: 100%; width: 0; background: linear-gradient(90deg, var(--accent), var(--accent-2)); transition: width .2s; }
+  .status { font-size: 13px; color: var(--muted); margin-top: 10px; min-height: 18px; line-height: 1.4; text-align: center; }
+  .status.err { color: var(--danger); }
+  .status.ok { color: var(--success); }
+  .spinner { width: 14px; height: 14px; border: 2px solid var(--border-strong); border-top-color: var(--accent-2); border-radius: 50%; display: inline-block; animation: spin .7s linear infinite; vertical-align: -2px; margin-right: 6px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .result { display: none; }
+  .result.show { display: block; }
+  .result img { width: 100%; border-radius: var(--r-sm); border: 1px solid var(--border); display: block; background: #000; }
+  .result-actions { display: flex; gap: 10px; margin-top: 12px; }
+  .result-actions > * { flex: 1; }
+
+  .overlay { position: fixed; inset: 0; background: rgba(5,8,12,.75); backdrop-filter: blur(4px); z-index: 100; display: none; align-items: flex-end; }
+  .overlay.show { display: flex; }
+  .sheet { background: var(--panel); border-top: 1px solid var(--border-strong); border-radius: 18px 18px 0 0; width: 100%; max-height: 88vh; overflow-y: auto; padding: 18px 16px calc(18px + env(safe-area-inset-bottom)); }
+  .sheet h2 { margin: 0 0 4px; font-size: 17px; }
+  .sheet .row { display: flex; gap: 10px; margin-top: 14px; }
+  .sheet .row > * { flex: 1; }
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">📷</div>
+  <h1>LLMCam <span>· Ideogram</span></h1>
+  <button id="settingsBtn" title="Settings" style="padding:8px 11px; font-size:18px;">⚙</button>
+</header>
+
+<main>
+  <div class="card">
+    <h2>1 · Photo</h2>
+    <div class="capture-row">
+      <label class="btn primary"><input type="file" accept="image/*" capture="environment" id="camInput">📷 Take photo</label>
+      <label class="btn"><input type="file" accept="image/*" id="fileInput">🖼️ Gallery</label>
+    </div>
+    <div class="photo-wrap" id="photoWrap">
+      <img id="photo" alt="captured">
+      <span class="meta" id="photoMeta"></span>
+      <button class="clear" id="photoClear" title="Remove">×</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>2 · Transform</h2>
+    <div class="seg" id="modeSeg">
+      <button data-mode="faithful" class="active">Faithful</button>
+      <button data-mode="time">⏳ Time travel</button>
+      <button data-mode="style">🎨 Art style</button>
+      <button data-mode="genre">🎭 Genre / mood</button>
+    </div>
+    <div id="subWrap" style="display:none;">
+      <label class="fld" id="subLabel">Option</label>
+      <select id="subSel"></select>
+    </div>
+    <label class="fld">Extra instructions (optional)</label>
+    <textarea id="extra" placeholder="e.g. dramatic sunset light, add a vintage car…"></textarea>
+  </div>
+
+  <button class="primary big" id="run">✨ Render</button>
+  <div class="progress" id="progress"><div id="bar"></div></div>
+  <div class="status" id="status"></div>
+
+  <div class="card result" id="resultCard">
+    <h2>Result</h2>
+    <img id="resultImg" alt="rendered result">
+    <div class="result-actions">
+      <button id="shareBtn">⤴ Share</button>
+      <a class="btn" id="downloadBtn" download="llmcam.png">⤓ Save</a>
+    </div>
+  </div>
+</main>
+
+<!-- SETTINGS SHEET -->
+<div class="overlay" id="settingsOverlay">
+  <div class="sheet">
+    <h2>⚙ Settings</h2>
+    <div class="hint">Shared with the main Ideogrammar editor on this device. ComfyUI is reached through whatever server delivered this page.</div>
+
+    <label class="fld">LLM provider</label>
+    <div class="seg" id="providerSeg">
+      <button data-p="openrouter">OpenRouter</button>
+      <button data-p="local">Local / LM Studio</button>
+    </div>
+    <label class="fld">Base URL</label>
+    <input type="text" id="cfgBaseUrl" placeholder="https://openrouter.ai/api/v1" autocomplete="off">
+    <label class="fld">API key</label>
+    <input type="password" id="cfgApiKey" placeholder="sk-or-… (blank for local)" autocomplete="off">
+    <label class="fld">Model (must be vision-capable)</label>
+    <input type="text" id="cfgModel" placeholder="anthropic/claude-3.5-sonnet" autocomplete="off">
+
+    <label class="fld">Quality</label>
+    <select id="cfgPreset">
+      <option value="Turbo">Turbo (12 steps, fastest)</option>
+      <option value="Default">Default (20 steps)</option>
+      <option value="Quality">Quality (48 steps)</option>
+    </select>
+    <label class="fld" style="display:flex; align-items:center; gap:10px; margin-top:14px;">
+      <input type="checkbox" id="cfgSave" style="width:auto;"> Save renders permanently on the server
+    </label>
+    <label class="fld" style="display:flex; align-items:center; gap:10px;">
+      <input type="checkbox" id="cfgAutoAspect" checked style="width:auto;"> Match aspect ratio to the photo
+    </label>
+
+    <div class="row">
+      <button id="settingsClose">Done</button>
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+const $ = id => document.getElementById(id);
+
+/* ====================================================================== */
+/*  Engine — mirrors index.html (workflow template, build, render, LLM).   */
+/*  Keep in sync with index.html; uses the same localStorage keys so       */
+/*  config carries over between the two apps on the same device.           */
+/* ====================================================================== */
+const COORD = 1000;
+
+/* ---- LLM config (shared key with the editor) ---- */
+const CFG_KEY = "ideogram_llm_cfg";
+const PROVIDER_DEFAULTS = {
+  openrouter: { baseUrl: "https://openrouter.ai/api/v1", model: "anthropic/claude-3.5-sonnet" },
+  local:      { baseUrl: "http://localhost:1234/v1",     model: "local-model" }
+};
+function loadCfg() {
+  let cfg; try { cfg = JSON.parse(localStorage.getItem(CFG_KEY)); } catch (_) {}
+  if (!cfg || typeof cfg !== "object") cfg = { provider: "openrouter", baseUrl: PROVIDER_DEFAULTS.openrouter.baseUrl, apiKey: "", model: PROVIDER_DEFAULTS.openrouter.model };
+  return cfg;
+}
+function saveCfg(cfg) { localStorage.setItem(CFG_KEY, JSON.stringify(cfg)); }
+
+/* ---- ComfyUI config (shared key with the editor) ---- */
+const COMFY_KEY = "ideogram_comfy_cfg";
+function defaultComfyCfg() {
+  return {
+    mode: "comfy", url: "http://127.0.0.1:8188", _defaultsV: 2,
+    direct: false, save: false, workflow: "v2",
+    aspect_ratio: "1:1 (Square)", megapixels: 2,
+    preset: "Turbo", seed: 453251084258580, randomize: true,
+    cfg: 3, sampler_name: "euler",
+    cfg_override: 3, start_percent: 0.9, end_percent: 1,
+    diff_model: "ideogram4_fp8_scaled.safetensors",
+    uncond_model: "ideogram4_unconditional_fp8_scaled.safetensors",
+    vae_name: "flux2-vae.safetensors",
+    clip_name: "qwen3vl_8b_fp8_scaled.safetensors", clip_type: "ideogram4",
+    batch_size: 1
+  };
+}
+let comfyCfg = loadComfyCfg();
+function loadComfyCfg() {
+  let c; try { c = JSON.parse(localStorage.getItem(COMFY_KEY)); } catch (_) {}
+  const cfg = Object.assign(defaultComfyCfg(), c && typeof c === "object" ? c : {});
+  if (cfg._defaultsV !== 2) { cfg.workflow = "v2"; cfg.cfg = 3; cfg.sampler_name = "euler"; cfg._defaultsV = 2; }
+  return cfg;
+}
+function saveComfyCfg() { localStorage.setItem(COMFY_KEY, JSON.stringify(comfyCfg)); }
+
+/* ---- Workflow template (mirror of index.html) ---- */
+const WORKFLOW_TEMPLATE = {
+  "25": { inputs: { images: ["98:13", 0] }, class_type: "PreviewImage", _meta: { title: "Preview Image" } },
+  "37": { inputs: { aspect_ratio: "1:1 (Square)", megapixels: 2 }, class_type: "ResolutionSelector", _meta: { title: "Resolution Selector" } },
+  "98:9": { inputs: { vae_name: "flux2-vae.safetensors" }, class_type: "VAELoader", _meta: { title: "Load VAE" } },
+  "98:10": { inputs: { conditioning: ["98:24", 0] }, class_type: "ConditioningZeroOut", _meta: { title: "ConditioningZeroOut" } },
+  "98:11": { inputs: { width: ["98:31", 1], height: ["98:32", 1], batch_size: 1 }, class_type: "EmptyFlux2LatentImage", _meta: { title: "Empty Flux 2 Latent" } },
+  "98:12": { inputs: { noise: ["98:18", 0], guider: ["98:155", 0], sampler: ["98:16", 0], sigmas: ["98:17", 0], latent_image: ["98:11", 0] }, class_type: "SamplerCustomAdvanced", _meta: { title: "SamplerCustomAdvanced" } },
+  "98:13": { inputs: { samples: ["98:12", 0], vae: ["98:9", 0] }, class_type: "VAEDecode", _meta: { title: "VAE Decode" } },
+  "98:16": { inputs: { sampler_name: "res_multistep" }, class_type: "KSamplerSelect", _meta: { title: "KSamplerSelect" } },
+  "98:17": { inputs: { steps: ["98:151", 1], width: ["98:31", 1], height: ["98:32", 1], mu: ["98:144", 0], std: ["98:146", 0] }, class_type: "Ideogram4Scheduler", _meta: { title: "Ideogram 4 Scheduler" } },
+  "98:18": { inputs: { noise_seed: 453251084258580 }, class_type: "RandomNoise", _meta: { title: "RandomNoise" } },
+  "98:23": { inputs: { unet_name: "ideogram4_fp8_scaled.safetensors", weight_dtype: "default" }, class_type: "UNETLoader", _meta: { title: "Load Diffusion Model" } },
+  "98:24": { inputs: { text: "", clip: ["98:14", 0] }, class_type: "CLIPTextEncode", _meta: { title: "CLIP Text Encode (Positive Prompt)" } },
+  "98:14": { inputs: { clip_name: "qwen3vl_8b_fp8_scaled.safetensors", type: "ideogram4", device: "default" }, class_type: "CLIPLoader", _meta: { title: "Load CLIP" } },
+  "98:27": { inputs: { value: ["37", 0] }, class_type: "PrimitiveInt", _meta: { title: "Int (Width)" } },
+  "98:28": { inputs: { value: ["37", 1] }, class_type: "PrimitiveInt", _meta: { title: "Int (Height)" } },
+  "98:31": { inputs: { expression: "max(((a + 15) // 16) * 16, 256)", "values.a": ["98:27", 0] }, class_type: "ComfyMathExpression", _meta: { title: "Math Expression" } },
+  "98:32": { inputs: { expression: "max(((a + 15) // 16) * 16, 256)", "values.a": ["98:28", 0] }, class_type: "ComfyMathExpression", _meta: { title: "Math Expression" } },
+  "98:144": { inputs: { value: ["98:145", 0] }, class_type: "ComfyNumberConvert", _meta: { title: "Number Convert" } },
+  "98:145": { inputs: { json_string: ["98:148", 0], key: "mu" }, class_type: "JsonExtractString", _meta: { title: "Extract Text from JSON" } },
+  "98:146": { inputs: { value: ["98:150", 0] }, class_type: "ComfyNumberConvert", _meta: { title: "Number Convert" } },
+  "98:147": { inputs: { json_string: '{"Quality":{"num_steps":48,"mu":0.0,"std":1.5,"preset_id":"V4_QUALITY_48"},"Default":{"num_steps":20,"mu":0.0,"std":1.75,"preset_id":"V4_DEFAULT_20"},"Turbo":{"num_steps":12,"mu":0.5,"std":1.75,"preset_id":"V4_TURBO_12"}}', key: ["98:156", 0] }, class_type: "JsonExtractString", _meta: { title: "Extract Text from JSON" } },
+  "98:148": { inputs: { string: ["98:147", 0], find: "'", replace: '"' }, class_type: "StringReplace", _meta: { title: "Replace Text" } },
+  "98:149": { inputs: { json_string: ["98:148", 0], key: "num_steps" }, class_type: "JsonExtractString", _meta: { title: "Extract Text from JSON" } },
+  "98:150": { inputs: { json_string: ["98:148", 0], key: "std" }, class_type: "JsonExtractString", _meta: { title: "Extract Text from JSON" } },
+  "98:151": { inputs: { value: ["98:149", 0] }, class_type: "ComfyNumberConvert", _meta: { title: "Number Convert" } },
+  "98:154": { inputs: { unet_name: "ideogram4_unconditional_fp8_scaled.safetensors", weight_dtype: "default" }, class_type: "UNETLoader", _meta: { title: "Load Diffusion Model" } },
+  "98:155": { inputs: { cfg: 7, model: ["98:157", 0], positive: ["98:24", 0], model_negative: ["98:154", 0], negative: ["98:10", 0] }, class_type: "DualModelGuider", _meta: { title: "Dual Model CFG Guider" } },
+  "98:156": { inputs: { choice: "Turbo", index: 2, option1: "Quality", option2: "Default", option3: "Turbo", option4: "" }, class_type: "CustomCombo", _meta: { title: "Custom Combo" } },
+  "98:157": { inputs: { cfg: 3, start_percent: 0.9, end_percent: 1, model: ["98:23", 0] }, class_type: "CFGOverride", _meta: { title: "CFG Override" } }
+};
+const NODE = { resolution: "37", seed: "98:18", preset: "98:156", guider: "98:155", cfgOverride: "98:157", sampler: "98:16", prompt: "98:24", clip: "98:14", diffModel: "98:23", uncondModel: "98:154", vae: "98:9", latent: "98:11" };
+const PRESET_INDEX = { Quality: 0, Default: 1, Turbo: 2 };
+function makeWorkflowV2(v1) {
+  const wf = JSON.parse(JSON.stringify(v1));
+  wf["98:200"] = { inputs: { shift: 5, model: ["98:23", 0] }, class_type: "ModelSamplingAuraFlow", _meta: { title: "ModelSamplingAuraFlow" } };
+  wf["98:157"].inputs.model = ["98:200", 0];
+  wf["98:17"] = { inputs: { model: ["98:200", 0], scheduler: "simple", steps: ["98:151", 1], denoise: 1 }, class_type: "BasicScheduler", _meta: { title: "BasicScheduler" } };
+  wf["98:16"].inputs.sampler_name = "euler";
+  return wf;
+}
+const WORKFLOW_TEMPLATE_V2 = makeWorkflowV2(WORKFLOW_TEMPLATE);
+
+/* ---- resolution / prompt building (mirror of index.html) ---- */
+function parseAspectRatio(s) {
+  const m = String(s || "").match(/(\d+(?:\.\d+)?)\s*:\s*(\d+(?:\.\d+)?)/);
+  if (m) { const a = parseFloat(m[1]), b = parseFloat(m[2]); if (a > 0 && b > 0) return a / b; }
+  return 1;
+}
+const ASPECT_OPTIONS = ["1:1 (Square)", "3:2 (Photo)", "4:3 (Standard)", "16:9 (Widescreen)", "21:9 (Ultrawide)", "2:3 (Portrait Photo)", "3:4 (Portrait Standard)", "9:16 (Portrait Widescreen)"];
+function nearestAspect(ar) {
+  let best = ASPECT_OPTIONS[0], bestD = Infinity;
+  for (const opt of ASPECT_OPTIONS) { const d = Math.abs(Math.log(parseAspectRatio(opt) / ar)); if (d < bestD) { bestD = d; best = opt; } }
+  return best;
+}
+function aspectInfo(label) {
+  label = label || comfyCfg.aspect_ratio || "1:1 (Square)";
+  const ar = parseAspectRatio(label);
+  const m = String(label).match(/\d+(?:\.\d+)?\s*:\s*\d+(?:\.\d+)?/);
+  const ratio = m ? m[0].replace(/\s+/g, "") : "1:1";
+  const orientation = ar > 1.02 ? "landscape" : ar < 0.98 ? "portrait" : "square";
+  return { label, ar, ratio, orientation };
+}
+function computeDims() {
+  const ar = aspectInfo().ar;
+  const area = (comfyCfg.megapixels || 2) * 1024 * 1024;
+  const rs8 = x => Math.round(x / 8) * 8;
+  const lat = x => Math.max(256, Math.floor((x + 15) / 16) * 16);
+  return { width: lat(rs8(Math.sqrt(area * ar))), height: lat(rs8(Math.sqrt(area / ar))) };
+}
+// Build the diffusion prompt object from an LLM setup (schema bbox = [x1,y1,x2,y2]).
+function buildPromptObj(setup) {
+  const info = aspectInfo(), d = computeDims();
+  const sd = setup.style_description || {};
+  const cd = setup.compositional_deconstruction || {};
+  const elements = Array.isArray(cd.elements) ? cd.elements.map(e => {
+    const b = Array.isArray(e.bbox) && e.bbox.length === 4 ? e.bbox.map(n => Math.round(+n || 0)) : [100, 100, 500, 500];
+    const [x1, y1, x2, y2] = b;
+    return { type: e.type || "obj", bbox: [y1, x1, y2, x2], desc: e.desc || "", color_palette: Array.isArray(e.color_palette) ? e.color_palette : [] };
+  }) : [];
+  return {
+    canvas: { width: d.width, height: d.height, aspect_ratio: info.ratio, orientation: info.orientation },
+    high_level_description: setup.high_level_description || "",
+    style_description: { aesthetics: sd.aesthetics || "", lighting: sd.lighting || "", photo: sd.photo || "", medium: sd.medium || "", color_palette: Array.isArray(sd.color_palette) ? sd.color_palette : [] },
+    compositional_deconstruction: { background: cd.background || "", elements }
+  };
+}
+function buildPromptText(setup) {
+  const obj = buildPromptObj(setup), info = aspectInfo(), d = obj.canvas;
+  const coord = ` Element bboxes are [ymin,xmin,ymax,xmax] on a 0-1000 normalized grid (each axis 0-1000 independent of the ${d.width}x${d.height} pixel size), origin top-left, x right, y down; place each element exactly there, do not rotate or mirror the layout.`;
+  let lead;
+  if (info.orientation === "landscape") lead = `LANDSCAPE orientation: a wide horizontal ${info.ratio} image, ${d.width}x${d.height} pixels (wider than tall).` + coord;
+  else if (info.orientation === "portrait") lead = `PORTRAIT orientation: a tall vertical ${info.ratio} image, ${d.width}x${d.height} pixels (taller than wide).` + coord;
+  else lead = `SQUARE ${info.ratio} image, ${d.width}x${d.height} pixels.` + coord;
+  return lead + "\n\n" + JSON.stringify(obj, null, 2);
+}
+function buildWorkflow(setup) {
+  const base = comfyCfg.workflow === "v2" ? WORKFLOW_TEMPLATE_V2 : WORKFLOW_TEMPLATE;
+  const wf = (typeof structuredClone === "function") ? structuredClone(base) : JSON.parse(JSON.stringify(base));
+  wf[NODE.prompt].inputs.text = buildPromptText(setup);
+  wf[NODE.resolution].inputs.aspect_ratio = comfyCfg.aspect_ratio;
+  wf[NODE.resolution].inputs.megapixels = comfyCfg.megapixels;
+  wf[NODE.seed].inputs.noise_seed = comfyCfg.seed;
+  wf[NODE.preset].inputs.choice = comfyCfg.preset;
+  wf[NODE.preset].inputs.index = PRESET_INDEX[comfyCfg.preset] ?? 2;
+  wf[NODE.guider].inputs.cfg = comfyCfg.cfg;
+  wf[NODE.sampler].inputs.sampler_name = comfyCfg.sampler_name;
+  wf[NODE.cfgOverride].inputs.cfg = comfyCfg.cfg_override;
+  wf[NODE.cfgOverride].inputs.start_percent = comfyCfg.start_percent;
+  wf[NODE.cfgOverride].inputs.end_percent = comfyCfg.end_percent;
+  wf[NODE.diffModel].inputs.unet_name = comfyCfg.diff_model;
+  wf[NODE.uncondModel].inputs.unet_name = comfyCfg.uncond_model;
+  wf[NODE.vae].inputs.vae_name = comfyCfg.vae_name;
+  wf[NODE.clip].inputs.clip_name = comfyCfg.clip_name;
+  wf[NODE.clip].inputs.type = comfyCfg.clip_type;
+  wf[NODE.latent].inputs.batch_size = comfyCfg.batch_size;
+  if (comfyCfg.save) wf["25"] = { inputs: { images: ["98:13", 0], filename_prefix: "llmcam" }, class_type: "SaveImage", _meta: { title: "Save Image" } };
+  return wf;
+}
+
+/* ---- ComfyUI plumbing (mirror of index.html) ---- */
+function comfyBase() {
+  if (!comfyCfg.direct) return (location.protocol === "http:" || location.protocol === "https:") ? location.origin : "";
+  return (comfyCfg.url || "").trim().replace(/\/+$/, "");
+}
+function getClientId() {
+  let id = localStorage.getItem("ideogram_comfy_client");
+  if (!id) { id = "llmcam-" + Date.now().toString(36) + Math.random().toString(36).slice(2, 10); localStorage.setItem("ideogram_comfy_client", id); }
+  return id;
+}
+function randomSeed() { return Math.floor(Math.random() * 1e15); }
+let objectInfoCache = { base: null, info: null };
+async function getObjectInfo(base) {
+  if (objectInfoCache.base === base && objectInfoCache.info) return objectInfoCache.info;
+  try { const r = await fetch(base + "/object_info", { cache: "no-store" }); if (r.ok) objectInfoCache = { base, info: await r.json() }; } catch (_) {}
+  return objectInfoCache.base === base ? objectInfoCache.info : null;
+}
+function fillMissingRequiredInputs(wf, info) {
+  if (!info) return;
+  for (const node of Object.values(wf)) {
+    const req = info[node.class_type]?.input?.required;
+    if (!req) continue;
+    for (const key of Object.keys(req)) {
+      if (key in node.inputs) continue;
+      const spec = req[key], opts = Array.isArray(spec) ? spec[1] : null;
+      if (opts && Object.prototype.hasOwnProperty.call(opts, "default")) node.inputs[key] = opts.default;
+      else if (Array.isArray(spec) && Array.isArray(spec[0]) && spec[0].length) node.inputs[key] = spec[0][0];
+    }
+  }
+}
+
+/* ---- LLM call (mirror of index.html) ---- */
+const SYSTEM_PROMPT = `You are a layout designer that turns a natural-language image description into a structured JSON "prompt" for the Ideogram 4 image model.
+
+Output ONLY a single JSON object (no markdown, no commentary) with EXACTLY this shape:
+{
+  "high_level_description": "one vivid sentence describing the whole image",
+  "style_description": { "aesthetics": "...", "lighting": "...", "photo": "...", "medium": "...", "color_palette": ["#RRGGBB"] },
+  "compositional_deconstruction": { "background": "...", "elements": [ { "type": "obj|subject|text|logo|bg", "bbox": [x1, y1, x2, y2], "desc": "...", "color_palette": ["#RRGGBB"] } ] }
+}
+
+Rules:
+- The image canvas is a 1000 x 1000 coordinate space. Origin (0,0) is the TOP-LEFT. x grows right, y grows down. Every bbox is [x1, y1, x2, y2] with 0 <= x1 < x2 <= 1000 and 0 <= y1 < y2 <= 1000.
+- Use 3 to 6 elements unless the scene clearly calls for more. Any literal text goes in a "text" element with the exact words in its desc.
+- All colors are uppercase 6-digit hex. Give each element a small palette (1-4 colors).
+- Be concrete and specific. Return valid JSON only.`;
+const IMAGE_SYSTEM_PROMPT = SYSTEM_PROMPT + `
+
+IMAGE MODE: You are given an actual IMAGE (and possibly extra text guidance). Look at the image carefully and reconstruct it as the JSON schema above: capture its subject in high_level_description, its art style / medium / lighting / dominant color palette in style_description, and decompose it into the key positioned elements — background, main subject(s), distinct objects, logos, and any literal text you can READ. Estimate each element's bbox from where it sits in the image, mapped onto the 1000x1000 canvas. PRESERVE THE COMPOSITION AND LAYOUT exactly (positions and sizes of everything). If extra guidance asks to change the era/style/genre/content, apply that transformation to WHAT each element depicts while keeping WHERE it sits identical.`;
+
+async function chatCompletion(cfg, headers, body) {
+  const send = b => fetch(cfg.baseUrl + "/chat/completions", { method: "POST", headers, body: JSON.stringify(b) });
+  const errDetail = async res => { try { const j = await res.json(); return j.error?.message || JSON.stringify(j.error || j); } catch (_) { return await res.text().catch(() => ""); } };
+  let res = await send(body);
+  if (!res.ok) {
+    const detail = await errDetail(res);
+    if (res.status === 400 && body.response_format && /response_format/i.test(detail)) {
+      const retry = { ...body }; delete retry.response_format;
+      res = await send(retry);
+      if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText} — ${await errDetail(res)}`);
+    } else throw new Error(`HTTP ${res.status} ${res.statusText}${detail ? " — " + detail : ""}`);
+  }
+  const data = await res.json();
+  const content = data.choices?.[0]?.message?.content;
+  if (!content) throw new Error("Empty response from model.");
+  return content;
+}
+function extractJSON(text) {
+  if (typeof text !== "string") return null;
+  let t = text.trim();
+  const fence = t.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  if (fence) t = fence[1].trim();
+  try { return JSON.parse(t); } catch (_) {}
+  const start = t.indexOf("{"), end = t.lastIndexOf("}");
+  if (start !== -1 && end > start) { try { return JSON.parse(t.slice(start, end + 1)); } catch (_) {} }
+  return null;
+}
+
+/* ====================================================================== */
+/*  LLMCam UI                                                              */
+/* ====================================================================== */
+let photoDataUrl = null;   // downscaled photo for the LLM
+let photoAR = null;        // captured photo aspect ratio (w/h)
+let busy = false;
+let lastResult = null;     // {filename,subfolder,type}
+
+const PRESETS = {
+  faithful: { label: null, options: null, guide: () => "Re-create this exact scene faithfully, same composition." },
+  time: {
+    label: "Era", options: ["Ancient Rome", "Medieval", "Renaissance", "Victorian (1890s)", "Roaring 1920s", "1950s Americana", "1980s", "Cyberpunk near-future", "Far future / sci-fi"],
+    guide: v => `Time travel: keep the exact same composition, framing and element positions, but depict the scene as a period-accurate ${v} version — adjust clothing, technology, vehicles, architecture, materials and color treatment to that era.`
+  },
+  style: {
+    label: "Style", options: ["Oil painting", "Watercolor", "Anime", "Pixel art", "Comic book", "3D render", "Pencil sketch", "Pop art", "Low-poly", "Claymation"],
+    guide: v => `Re-render the scene in this medium/style: ${v}. Keep the exact same composition and layout; only change the rendering style.`
+  },
+  genre: {
+    label: "Genre / mood", options: ["Cyberpunk", "Film noir", "High fantasy", "Post-apocalyptic", "Vaporwave", "Steampunk", "Horror", "Solarpunk", "Western", "Fairy tale"],
+    guide: v => `Re-theme the scene as ${v}. Keep the exact same composition and layout; restyle the content, lighting and mood to match the theme.`
+  }
+};
+let mode = "faithful";
+
+function setStatus(html, cls) { const s = $("status"); s.innerHTML = html || ""; s.className = "status" + (cls ? " " + cls : ""); }
+function setBar(frac) { $("bar").style.width = Math.max(0, Math.min(1, frac)) * 100 + "%"; }
+function showProgress(on) { $("progress").classList.toggle("show", on); if (!on) setBar(0); }
+
+/* ---- photo capture + downscale ---- */
+function handleFile(file) {
+  if (!file) return;
+  if (!file.type.startsWith("image/")) { setStatus("That's not an image.", "err"); return; }
+  const img = new Image();
+  const url = URL.createObjectURL(file);
+  img.onload = () => {
+    photoAR = img.naturalWidth / img.naturalHeight;
+    const maxDim = 1280, scale = Math.min(1, maxDim / Math.max(img.naturalWidth, img.naturalHeight));
+    const w = Math.round(img.naturalWidth * scale), h = Math.round(img.naturalHeight * scale);
+    const cv = document.createElement("canvas"); cv.width = w; cv.height = h;
+    cv.getContext("2d").drawImage(img, 0, 0, w, h);
+    photoDataUrl = cv.toDataURL("image/jpeg", 0.9);
+    URL.revokeObjectURL(url);
+    $("photo").src = photoDataUrl;
+    $("photoMeta").textContent = `${img.naturalWidth}×${img.naturalHeight}`;
+    $("photoWrap").classList.add("show");
+    if ($("cfgAutoAspect").checked) { comfyCfg.aspect_ratio = nearestAspect(photoAR); saveComfyCfg(); }
+    setStatus("", "");
+  };
+  img.onerror = () => { URL.revokeObjectURL(url); setStatus("Could not read that image.", "err"); };
+  img.src = url;
+}
+function clearPhoto() {
+  photoDataUrl = null; photoAR = null;
+  $("camInput").value = ""; $("fileInput").value = "";
+  $("photo").src = ""; $("photoWrap").classList.remove("show");
+}
+
+/* ---- transform mode UI ---- */
+function selectMode(m) {
+  mode = m;
+  document.querySelectorAll("#modeSeg button").forEach(b => b.classList.toggle("active", b.dataset.mode === m));
+  const p = PRESETS[m];
+  if (p.options) {
+    $("subLabel").textContent = p.label;
+    $("subSel").innerHTML = p.options.map(o => `<option value="${o}">${o}</option>`).join("");
+    $("subWrap").style.display = "block";
+  } else $("subWrap").style.display = "none";
+}
+function currentGuidance() {
+  const p = PRESETS[mode];
+  const parts = [];
+  if (p.guide) parts.push(p.options ? p.guide($("subSel").value) : p.guide());
+  const extra = $("extra").value.trim();
+  if (extra) parts.push(extra);
+  return parts.join(" ");
+}
+
+/* ---- the main pipeline: photo -> LLM -> ComfyUI -> result ---- */
+async function run() {
+  if (busy) return;
+  if (!photoDataUrl) { setStatus("Take or choose a photo first.", "err"); return; }
+  const cfg = loadCfg();
+  const base = comfyBase();
+  if (!base) { setStatus("Open this page through the comfy_proxy server (not as a file).", "err"); return; }
+  if (!cfg.baseUrl || !cfg.model) { setStatus("Set your LLM provider in ⚙ Settings.", "err"); openSettings(); return; }
+  if (cfg.provider === "openrouter" && !cfg.apiKey) { setStatus("OpenRouter needs an API key (⚙ Settings).", "err"); openSettings(); return; }
+
+  busy = true; $("run").disabled = true; $("resultCard").classList.remove("show");
+  showProgress(true); setBar(0.05);
+
+  try {
+    /* 1) analyze the photo with the vision LLM */
+    setStatus('<span class="spinner"></span>Analyzing photo…');
+    const headers = { "Content-Type": "application/json" };
+    if (cfg.apiKey) headers["Authorization"] = "Bearer " + cfg.apiKey;
+    if (cfg.provider === "openrouter") { headers["HTTP-Referer"] = location.origin; headers["X-Title"] = "LLMCam"; }
+    const guidance = currentGuidance();
+    const text = guidance ? "Build the structured layout JSON from the attached image. Extra guidance: " + guidance
+                          : "Build the structured layout JSON from the attached image.";
+    const body = {
+      model: cfg.model,
+      messages: [{ role: "system", content: IMAGE_SYSTEM_PROMPT }, { role: "user", content: [{ type: "text", text }, { type: "image_url", image_url: { url: photoDataUrl } }] }],
+      temperature: 0.7, response_format: { type: "json_object" }
+    };
+    const content = await chatCompletion(cfg, headers, body);
+    const setup = extractJSON(content);
+    if (!setup) throw new Error("The model didn't return usable JSON.");
+    setBar(0.25);
+
+    /* 2) submit to ComfyUI */
+    setStatus('<span class="spinner"></span>Rendering…');
+    comfyCfg.seed = randomSeed(); saveComfyCfg();
+    const wf = buildWorkflow(setup);
+    fillMissingRequiredInputs(wf, await getObjectInfo(base));
+    const res = await fetch(base + "/prompt", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prompt: wf, client_id: getClientId() }) });
+    if (!res.ok) {
+      let detail = "";
+      try { const j = await res.json(); detail = j.error?.message || j.error?.type || ""; if (j.node_errors) { const ne = Object.values(j.node_errors).map(n => (n.errors || []).map(e => e.message).join(", ")).filter(Boolean).join("; "); if (ne) detail += (detail ? " — " : "") + ne; } }
+      catch (_) { detail = await res.text().catch(() => ""); }
+      throw new Error("ComfyUI HTTP " + res.status + (detail ? " — " + detail : ""));
+    }
+    const promptId = (await res.json()).prompt_id;
+    if (!promptId) throw new Error("No prompt_id from ComfyUI.");
+
+    /* 3) wait for the render, then show it */
+    const img = await waitForRender(base, promptId);
+    const url = base + "/view?" + new URLSearchParams({ filename: img.filename, subfolder: img.subfolder || "", type: img.type || "output" }).toString();
+    lastResult = img;
+    await showResult(url);
+    setStatus("Done ✓", "ok");
+  } catch (err) {
+    let msg = err.message || String(err);
+    if (err instanceof TypeError) msg = "Network error — check the server URL, that it's running, and CORS.";
+    setStatus(msg, "err");
+  } finally {
+    busy = false; $("run").disabled = false; showProgress(false);
+  }
+}
+
+function waitForRender(base, promptId) {
+  return new Promise((resolve, reject) => {
+    let done = false;
+    const STALL_MS = 5 * 60 * 1000; let lastAt = Date.now();
+    const finish = img => { if (done) return; done = true; try { ws && ws.close(); } catch (_) {} resolve(img); };
+    let ws = null;
+    try {
+      ws = new WebSocket(base.replace(/^http/i, "ws") + "/ws?clientId=" + encodeURIComponent(getClientId()));
+      ws.onmessage = ev => {
+        if (typeof ev.data !== "string") return;
+        let m; try { m = JSON.parse(ev.data); } catch (_) { return; }
+        if (m.type === "progress" && m.data) { lastAt = Date.now(); setBar(0.25 + 0.7 * ((m.data.value || 0) / (m.data.max || 1))); }
+        else if (m.type === "executing" && m.data?.prompt_id === promptId) { lastAt = Date.now(); }
+      };
+      ws.onerror = () => {};
+    } catch (_) {}
+    const poll = async () => {
+      if (done) return;
+      try {
+        const r = await fetch(base + "/history/" + promptId);
+        if (r.ok) {
+          const h = await r.json(), outs = h[promptId]?.outputs;
+          if (outs) { for (const id of Object.keys(outs)) { const o = outs[id]; if (o.images?.length) return finish(o.images[o.images.length - 1]); } }
+        }
+      } catch (_) {}
+      if (Date.now() - lastAt > STALL_MS) { done = true; try { ws && ws.close(); } catch (_) {} reject(new Error("Render timed out — check the ComfyUI console.")); return; }
+      setTimeout(poll, 1500);
+    };
+    setTimeout(poll, 1200);
+  });
+}
+
+async function showResult(url) {
+  // Fetch as a blob so Save/Share work reliably on Android.
+  let blobUrl = url, blob = null;
+  try { blob = await (await fetch(url)).blob(); blobUrl = URL.createObjectURL(blob); } catch (_) {}
+  $("resultImg").src = blobUrl;
+  $("downloadBtn").href = blobUrl;
+  $("resultCard").classList.add("show");
+  $("resultCard").scrollIntoView({ behavior: "smooth", block: "start" });
+  $("shareBtn").onclick = async () => {
+    try {
+      if (blob && navigator.canShare) {
+        const file = new File([blob], "llmcam.png", { type: blob.type || "image/png" });
+        if (navigator.canShare({ files: [file] })) { await navigator.share({ files: [file], title: "LLMCam" }); return; }
+      }
+      if (navigator.share) { await navigator.share({ title: "LLMCam", url }); return; }
+      setStatus("Sharing not supported — use Save instead.", "err");
+    } catch (_) {}
+  };
+}
+
+/* ---- settings sheet ---- */
+function openSettings() {
+  const cfg = loadCfg();
+  $("cfgBaseUrl").value = cfg.baseUrl || ""; $("cfgApiKey").value = cfg.apiKey || ""; $("cfgModel").value = cfg.model || "";
+  document.querySelectorAll("#providerSeg button").forEach(b => b.classList.toggle("active", b.dataset.p === cfg.provider));
+  $("cfgPreset").value = comfyCfg.preset || "Turbo";
+  $("cfgSave").checked = !!comfyCfg.save;
+  $("settingsOverlay").classList.add("show");
+}
+function readSettings() {
+  const provider = document.querySelector("#providerSeg button.active")?.dataset.p || "openrouter";
+  saveCfg({ provider, baseUrl: $("cfgBaseUrl").value.trim().replace(/\/+$/, ""), apiKey: $("cfgApiKey").value.trim(), model: $("cfgModel").value.trim() });
+  comfyCfg.preset = $("cfgPreset").value;
+  comfyCfg.save = $("cfgSave").checked;
+  saveComfyCfg();
+}
+function closeSettings() { readSettings(); $("settingsOverlay").classList.remove("show"); }
+
+/* ---- wire up ---- */
+$("camInput").addEventListener("change", e => { handleFile(e.target.files[0]); });
+$("fileInput").addEventListener("change", e => { handleFile(e.target.files[0]); });
+$("photoClear").addEventListener("click", clearPhoto);
+document.querySelectorAll("#modeSeg button").forEach(b => b.addEventListener("click", () => selectMode(b.dataset.mode)));
+$("run").addEventListener("click", run);
+$("settingsBtn").addEventListener("click", openSettings);
+$("settingsClose").addEventListener("click", closeSettings);
+$("settingsOverlay").addEventListener("click", e => { if (e.target === $("settingsOverlay")) closeSettings(); });
+document.querySelectorAll("#providerSeg button").forEach(btn => btn.addEventListener("click", () => {
+  document.querySelectorAll("#providerSeg button").forEach(b => b.classList.remove("active"));
+  btn.classList.add("active");
+  const d = PROVIDER_DEFAULTS[btn.dataset.p];
+  const knownUrls = Object.values(PROVIDER_DEFAULTS).map(x => x.baseUrl);
+  const knownModels = Object.values(PROVIDER_DEFAULTS).map(x => x.model);
+  if (!$("cfgBaseUrl").value.trim() || knownUrls.includes($("cfgBaseUrl").value.trim().replace(/\/+$/, ""))) $("cfgBaseUrl").value = d.baseUrl;
+  if (!$("cfgModel").value.trim() || knownModels.includes($("cfgModel").value.trim())) $("cfgModel").value = d.model;
+}));
+
+selectMode("faithful");
+</script>
+</body>
+</html>

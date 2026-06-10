@@ -75,6 +75,15 @@ Then click **✨ Generate prompt**, describe the image, and the model returns th
 
 Click **🪄 Refine** to adjust the *current* setup with a natural-language change instead of starting over. Describe a change (e.g. "make it a lighter composition", "move the title to the bottom", "swap the palette to autumn tones") and the model rewrites the **entire** setup — style, background and every positioned element — to reflect it while preserving everything the request doesn't touch. Per-element vectorize modes are carried over by position. Quick-suggestion chips are provided. You can also refine straight from a render: open it in the viewer and press **🪄 Refine** to load that render's setup and adjust it.
 
+## LLMCam (mobile camera app)
+
+[`llmcam.html`](llmcam.html) is a separate **phone-first** front-end served by the same proxy. Open `http://<lan-ip>:8189/llmcam.html` on your Android phone: **take a photo**, pick a transformation, and it runs the photo through the vision LLM (preserving the composition) and renders it through Ideogram on your ComfyUI server, then shows the result with **Save / Share**.
+
+- **Capture** uses the phone's native camera (`<input capture>`) or the gallery — works over plain LAN HTTP (the live-camera API needs HTTPS, so it's intentionally not used).
+- **Transformations**: *Faithful* (same scene, Ideogram render), *Time travel* (period-accurate eras), *Art style* (oil/anime/pixel/…), *Genre / mood* (cyberpunk/noir/fantasy/…), plus a free-text box. Each keeps the original composition and changes only what's depicted.
+- **Aspect** auto-matches the photo's orientation by default.
+- It **shares the same `localStorage` config** as the main editor (LLM provider/key/model, quality preset), and reaches ComfyUI through the proxy that served the page — so there's nothing extra to configure if the main app already works on that device. Needs a **vision-capable** model.
+
 ## Setups & library
 
 A **setup** is the whole prompt builder state (description, style, background, positioned elements with per-element vectorize modes) plus the render parameters. Save the current one from **⚙ Settings → Setups & library**, and reload it anytime. Loading a setup also restores its **rendered image** in the preview window (the render it produced, if still available on the server; older setups fall back to matching a render in the gallery). Every render also captures its setup: open it in the viewer and press **⤵ Load setup** to restore exactly the prompt + settings that produced it. Stored in `localStorage`.
@@ -273,6 +282,7 @@ The **Test connection** button in the ComfyUI panel pings `/system_stats` and re
 | File | Purpose |
 |------|---------|
 | [`index.html`](index.html) | The entire app — editor, canvas, LLM generation, ComfyUI mode. |
+| [`llmcam.html`](llmcam.html) | Phone-first camera app — take a photo, transform it (time travel / art style / genre / faithful), render through Ideogram, save/share. Served by the proxy at `/llmcam.html`. |
 | [`comfy_proxy.py`](comfy_proxy.py) | Stdlib proxy: serves the page + local asset files (e.g. `vendor/`), forwards HTTP and the WebSocket to ComfyUI (same-origin, no CORS flags), and hosts the `/vectorize` endpoint (optional `vtracer`/`pillow` deps) plus `/ideogrammar/outputs` (gallery recovery; needs `--output-dir`). |
 | [`comfy_proxy.sh`](comfy_proxy.sh) | start/stop/status/restart/logs helper, plus `install-service`/`uninstall-service` to run it as a background systemd service. |
 | [`comfy_proxy.env.example`](comfy_proxy.env.example) | Template for `comfy_proxy.env` (untracked) — set your ComfyUI address/host/port there instead of in the tracked code. |
