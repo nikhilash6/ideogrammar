@@ -14,10 +14,10 @@
     --danger: #ef4444; --success: #34d399; --r: 12px; --r-sm: 9px;
   }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-  html, body { margin: 0; }
+  html, body { margin: 0; overscroll-behavior-y: none; }
   body {
     background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    min-height: 100vh; padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom);
+    min-height: 100vh; min-height: 100dvh; padding: env(safe-area-inset-top) 0 0;
     -webkit-font-smoothing: antialiased;
   }
   header {
