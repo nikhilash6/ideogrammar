@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#0b0f15">
-<title>LLMCam</title>
+<title>LLMCam - Ideogrammar</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2032%2032'%3E%3Crect%20width='32'%20height='32'%20rx='6'%20fill='%23f32446'/%3E%3Ccircle%20cx='16'%20cy='17'%20r='6'%20fill='none'%20stroke='%23fff'%20stroke-width='2.5'/%3E%3Crect%20x='11'%20y='7'%20width='10'%20height='4'%20rx='1.5'%20fill='%23fff'/%3E%3C/svg%3E">
 <style>
   :root {
@@ -98,7 +98,7 @@
 <body>
 <header>
   <div class="logo">📷</div>
-  <h1>LLMCam <span>· Ideogram</span></h1>
+  <h1>LLMCam <span>- Ideogrammar</span></h1>
   <button id="settingsBtn" title="Settings" style="padding:8px 11px; font-size:18px;">⚙</button>
 </header>
 
@@ -143,6 +143,18 @@
       <button id="shareBtn">⤴ Share</button>
       <a class="btn" id="downloadBtn" download="llmcam.png">⤓ Save</a>
     </div>
+    <label class="fld" style="margin-top:16px;">Transform this photo again</label>
+    <div class="seg" id="modeSeg2">
+      <button data-mode="faithful">Faithful</button>
+      <button data-mode="time">⏳ Time travel</button>
+      <button data-mode="style">🎨 Art style</button>
+      <button data-mode="genre">🎭 Genre / mood</button>
+    </div>
+    <div id="subWrap2" style="display:none;">
+      <label class="fld" id="subLabel2">Option</label>
+      <select id="subSel2"></select>
+    </div>
+    <button class="primary big" id="rerun" style="margin-top:12px;">↻ Re-render</button>
   </div>
 
   <div class="card gallery-card" id="galleryCard">
@@ -285,26 +297,46 @@ function selectMode(m) {
     $("subWrap").style.display = "block";
   } else $("subWrap").style.display = "none";
 }
-function currentGuidance() {
-  const p = PRESETS[mode];
+function buildGuidance(modeKey, subValue) {
+  const p = PRESETS[modeKey] || PRESETS.faithful;
   const parts = [];
-  if (p.guide) parts.push(p.options ? p.guide($("subSel").value) : p.guide());
+  if (p.guide) parts.push(p.options ? p.guide(subValue) : p.guide());
   const extra = $("extra").value.trim();
   if (extra) parts.push(extra);
   return parts.join(" ");
 }
 
+/* Result-card "transform again" panel — re-renders the SAME photo with a
+   different transform, no re-capture needed. */
+let resultMode = "faithful";
+function selectMode2(m, sub) {
+  resultMode = m;
+  document.querySelectorAll("#modeSeg2 button").forEach(b => b.classList.toggle("active", b.dataset.mode === m));
+  const p = PRESETS[m];
+  if (p.options) {
+    $("subLabel2").textContent = p.label;
+    $("subSel2").innerHTML = p.options.map(o => `<option value="${o}">${o}</option>`).join("");
+    if (sub) $("subSel2").value = sub;
+    $("subWrap2").style.display = "block";
+  } else $("subWrap2").style.display = "none";
+}
+
 /* ---- the main pipeline: photo -> LLM -> ComfyUI -> result ---- */
-async function run() {
+// opts.{mode,sub} override the top selector — used by the result-card
+// "transform again" panel to re-render the same photo a different way.
+async function run(opts) {
   if (busy) return;
   if (!photoDataUrl) { setStatus("Take or choose a photo first.", "err"); return; }
+  opts = opts || {};
+  const useMode = opts.mode || mode;
+  const useSub = ("sub" in opts) ? opts.sub : $("subSel").value;
   const cfg = loadCfg();
   const base = comfyBase();
   if (!base) { setStatus("Open this page through the comfy_proxy server (not as a file).", "err"); return; }
   if (!cfg.baseUrl || !cfg.model) { setStatus("Set your LLM provider in ⚙ Settings.", "err"); openSettings(); return; }
   if (cfg.provider === "openrouter" && !cfg.apiKey) { setStatus("OpenRouter needs an API key (⚙ Settings).", "err"); openSettings(); return; }
 
-  busy = true; $("run").disabled = true; $("resultCard").classList.remove("show");
+  busy = true; $("run").disabled = true; $("rerun").disabled = true;
   showProgress(true); setBar(0.05);
 
   try {
@@ -313,7 +345,7 @@ async function run() {
     const headers = { "Content-Type": "application/json" };
     if (cfg.apiKey) headers["Authorization"] = "Bearer " + cfg.apiKey;
     if (cfg.provider === "openrouter") { headers["HTTP-Referer"] = location.origin; headers["X-Title"] = "LLMCam"; }
-    const guidance = currentGuidance();
+    const guidance = buildGuidance(useMode, useSub);
     const text = guidance ? "Build the structured layout JSON from the attached image. Extra guidance: " + guidance
                           : "Build the structured layout JSON from the attached image.";
     const body = {
@@ -336,13 +368,14 @@ async function run() {
     const entry = { filename: img.filename, subfolder: img.subfolder || "", type: img.type || "output", ts: Date.now() };
     addToGallery(entry);
     await showEntry(entry);
+    selectMode2(useMode, useSub);   // reflect what was just rendered in the re-transform panel
     setStatus("Done ✓", "ok");
   } catch (err) {
     let msg = err.message || String(err);
     if (err instanceof TypeError) msg = "Network error — check the server URL, that it's running, and CORS.";
     setStatus(msg, "err");
   } finally {
-    busy = false; $("run").disabled = false; showProgress(false);
+    busy = false; $("run").disabled = false; $("rerun").disabled = false; showProgress(false);
   }
 }
 
@@ -459,7 +492,9 @@ $("camInput").addEventListener("change", e => { handleFile(e.target.files[0]); }
 $("fileInput").addEventListener("change", e => { handleFile(e.target.files[0]); });
 $("photoClear").addEventListener("click", clearPhoto);
 document.querySelectorAll("#modeSeg button").forEach(b => b.addEventListener("click", () => selectMode(b.dataset.mode)));
-$("run").addEventListener("click", run);
+document.querySelectorAll("#modeSeg2 button").forEach(b => b.addEventListener("click", () => selectMode2(b.dataset.mode)));
+$("run").addEventListener("click", () => run());
+$("rerun").addEventListener("click", () => run({ mode: resultMode, sub: $("subSel2").value }));
 $("settingsBtn").addEventListener("click", openSettings);
 $("settingsClose").addEventListener("click", closeSettings);
 $("settingsOverlay").addEventListener("click", e => { if (e.target === $("settingsOverlay")) closeSettings(); });
@@ -475,6 +510,7 @@ document.querySelectorAll("#providerSeg button").forEach(btn => btn.addEventList
 }));
 
 selectMode("faithful");
+selectMode2("faithful");
 loadGallery();
 renderGallery();
 </script>
