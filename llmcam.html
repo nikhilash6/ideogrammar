@@ -145,7 +145,7 @@
   <div class="status" id="status"></div>
 
   <div class="card result" id="resultCard">
-    <h2>Result <span class="right" style="font-weight:400; text-transform:none; letter-spacing:0; color:var(--faint);">drag to compare</span></h2>
+    <h2>Result <span class="right" id="cmpHint" style="font-weight:400; text-transform:none; letter-spacing:0; color:var(--faint);">drag to compare</span></h2>
     <div class="compare" id="compare">
       <img id="cmpAfter" class="cmp-img" alt="rendered result">
       <img id="cmpBefore" class="cmp-img" alt="original photo">
@@ -261,27 +261,38 @@ function showProgress(on) { $("progress").classList.toggle("show", on); if (!on)
 function viewUrl(it) { return comfyBase() + "/view?" + new URLSearchParams({ filename: it.filename, subfolder: it.subfolder || "", type: it.type || "output" }).toString(); }
 
 /* ---- photo capture + downscale ---- */
+// Downscale a loaded <img> to a ~1280px JPEG and make it the active subject.
+function setPhotoFromImage(img, metaLabel) {
+  photoAR = img.naturalWidth / img.naturalHeight;
+  const maxDim = 1280, scale = Math.min(1, maxDim / Math.max(img.naturalWidth, img.naturalHeight));
+  const w = Math.round(img.naturalWidth * scale), h = Math.round(img.naturalHeight * scale);
+  const cv = document.createElement("canvas"); cv.width = w; cv.height = h;
+  cv.getContext("2d").drawImage(img, 0, 0, w, h);
+  photoDataUrl = cv.toDataURL("image/jpeg", 0.9);
+  $("photo").src = photoDataUrl;
+  $("photoMeta").textContent = metaLabel || (img.naturalWidth + "×" + img.naturalHeight);
+  $("photoWrap").classList.add("show");
+  if ($("cfgAutoAspect").checked) { comfyCfg.aspect_ratio = nearestAspect(photoAR); saveComfyCfg(); }
+}
 function handleFile(file) {
   if (!file) return;
   if (!file.type.startsWith("image/")) { setStatus("That's not an image.", "err"); return; }
   const img = new Image();
   const url = URL.createObjectURL(file);
-  img.onload = () => {
-    photoAR = img.naturalWidth / img.naturalHeight;
-    const maxDim = 1280, scale = Math.min(1, maxDim / Math.max(img.naturalWidth, img.naturalHeight));
-    const w = Math.round(img.naturalWidth * scale), h = Math.round(img.naturalHeight * scale);
-    const cv = document.createElement("canvas"); cv.width = w; cv.height = h;
-    cv.getContext("2d").drawImage(img, 0, 0, w, h);
-    photoDataUrl = cv.toDataURL("image/jpeg", 0.9);
-    URL.revokeObjectURL(url);
-    $("photo").src = photoDataUrl;
-    $("photoMeta").textContent = `${img.naturalWidth}×${img.naturalHeight}`;
-    $("photoWrap").classList.add("show");
-    if ($("cfgAutoAspect").checked) { comfyCfg.aspect_ratio = nearestAspect(photoAR); saveComfyCfg(); }
-    setStatus("", "");
-  };
+  img.onload = () => { setPhotoFromImage(img); URL.revokeObjectURL(url); setStatus("", ""); };
   img.onerror = () => { URL.revokeObjectURL(url); setStatus("Could not read that image.", "err"); };
   img.src = url;
+}
+// Tap a gallery render: show it, and load it as the active subject so you can
+// re-render it in a different style. Prefers the original photo (kept in-memory
+// for this session's renders); for older items only the result is available.
+function openFromGallery(entry) {
+  showEntry(entry);
+  const src = entry._before || viewUrl(entry);
+  const img = new Image();
+  img.onload = () => { setPhotoFromImage(img, entry._before ? "from gallery · original photo" : "from gallery · result"); setStatus("Loaded — pick a transform and tap Render to re-style.", "ok"); };
+  img.onerror = () => {};
+  img.src = src;
 }
 function clearPhoto() {
   photoDataUrl = null; photoAR = null;
@@ -416,7 +427,8 @@ async function showEntry(entry) {
   $("downloadBtn").href = blobUrl;
   const before = entry._before;
   $("compare").classList.toggle("no-before", !before);
-  if (before) { $("cmpBefore").src = before; setCompare(50); }
+  $("cmpHint").style.display = before ? "" : "none";
+  if (before) { $("cmpBefore").src = before; setCompare(0); }   // full result first; drag to reveal the original
   $("resultCard").classList.add("show");
   $("resultCard").scrollIntoView({ behavior: "smooth", block: "start" });
   renderGallery(entry);
@@ -455,7 +467,7 @@ function renderGallery(active) {
     d.className = "thumb" + (active && active.filename === entry.filename ? " active" : "");
     const im = document.createElement("img"); im.src = viewUrl(entry); im.alt = "render";
     d.appendChild(im);
-    d.addEventListener("click", () => showEntry(entry));
+    d.addEventListener("click", () => openFromGallery(entry));
     g.appendChild(d);
   });
 }
