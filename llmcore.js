@@ -24,6 +24,7 @@ function loadCfg() {
   if (!cfg || typeof cfg !== "object") cfg = { provider: "openrouter", baseUrl: PROVIDER_DEFAULTS.openrouter.baseUrl, apiKey: "", model: PROVIDER_DEFAULTS.openrouter.model };
   if (!ELEMENT_LEVELS[cfg.elements]) cfg.elements = "balanced";   // detail: how many elements
   if (!DESC_LEVELS[cfg.desc]) cfg.desc = "balanced";             // detail: how verbose each desc
+  if (typeof cfg.temperature !== "number" || cfg.temperature < 0 || cfg.temperature > 2) cfg.temperature = 0.7;
   return cfg;
 }
 function saveCfg(cfg) { localStorage.setItem(CFG_KEY, JSON.stringify(cfg)); }

@@ -760,6 +760,8 @@
               </select>
             </div>
           </div>
+          <label>Temperature <span id="cfgTempVal" style="color:var(--faint)">0.7</span> <span style="color:var(--faint)">(higher = more varied; some models ignore it)</span></label>
+          <input type="range" id="cfgTemp" min="0" max="2" step="0.05" value="0.7" style="width:100%;">
           <div class="hint">Detail controls how many elements the model breaks the scene into and how verbose each element's description is (applies when generating from text or an image). Saved in this browser only. Save a preset per endpoint so switching providers doesn't lose the model name.</div>
         </div>
       </details>
@@ -1494,12 +1496,14 @@ function applyCfgToForm() {
   $("cfgModel").value = cfg.model || "";
   $("cfgElements").value = cfg.elements;
   $("cfgDesc").value = cfg.desc;
+  $("cfgTemp").value = cfg.temperature;
+  $("cfgTempVal").textContent = (+cfg.temperature).toFixed(2);
   document.querySelectorAll("#providerSeg button").forEach(b => b.classList.toggle("active", b.dataset.p === cfg.provider));
 }
 
 function readCfgFromForm() {
   const provider = document.querySelector("#providerSeg button.active")?.dataset.p || "openrouter";
-  const cfg = { provider, baseUrl: $("cfgBaseUrl").value.trim().replace(/\/+$/, ""), apiKey: $("cfgApiKey").value.trim(), model: $("cfgModel").value.trim(), elements: $("cfgElements").value, desc: $("cfgDesc").value };
+  const cfg = { provider, baseUrl: $("cfgBaseUrl").value.trim().replace(/\/+$/, ""), apiKey: $("cfgApiKey").value.trim(), model: $("cfgModel").value.trim(), elements: $("cfgElements").value, desc: $("cfgDesc").value, temperature: parseFloat($("cfgTemp").value) };
   saveCfg(cfg);
   return cfg;
 }
@@ -1551,7 +1555,7 @@ async function runGeneration() {
   const body = {
     model: cfg.model,
     messages: [{ role: "system", content: systemContent }, { role: "user", content: userContent }],
-    temperature: 0.7,
+    temperature: cfg.temperature,
     response_format: { type: "json_object" }
   };
 
@@ -1654,7 +1658,7 @@ async function runRefine(opts) {
   const body = {
     model: cfg.model,
     messages: [{ role: "system", content: REFINE_SYSTEM_PROMPT }, { role: "user", content: userMsg }],
-    temperature: 0.5,
+    temperature: cfg.temperature,
     response_format: { type: "json_object" }
   };
 
@@ -1725,7 +1729,7 @@ async function refineElement(el, instruction, ui) {
   const body = {
     model: cfg.model,
     messages: [{ role: "system", content: ELEMENT_REFINE_SYSTEM_PROMPT }, { role: "user", content: userMsg }],
-    temperature: 0.6
+    temperature: cfg.temperature
   };
 
   try {
@@ -1807,6 +1811,7 @@ $("refineClose").addEventListener("click", closeRefineModal);
 $("refineCancel").addEventListener("click", closeRefineModal);
 $("refineRun").addEventListener("click", () => runRefine());
 $("refineRenderRun").addEventListener("click", () => runRefine({ thenRender: true }));
+$("cfgTemp").addEventListener("input", () => { $("cfgTempVal").textContent = (+$("cfgTemp").value).toFixed(2); });
 $("refineStyleMode").addEventListener("change", refineModeChanged);
 $("refineStyleSub").addEventListener("change", refineStyleSync);
 let refinePressedSelf = false;

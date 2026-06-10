@@ -197,6 +197,8 @@
       <option value="balanced">Balanced</option>
       <option value="rich">Rich</option>
     </select>
+    <label class="fld">Temperature <span id="cfgTempVal" style="color:var(--faint)">0.7</span></label>
+    <input type="range" id="cfgTemp" min="0" max="2" step="0.05" value="0.7" style="width:100%;">
 
     <label class="fld">Quality</label>
     <select id="cfgPreset">
@@ -331,7 +333,7 @@ async function run() {
     const body = {
       model: cfg.model,
       messages: [{ role: "system", content: IMAGE_SYSTEM_PROMPT + detailDirective(cfg) }, { role: "user", content: [{ type: "text", text }, { type: "image_url", image_url: { url: photoDataUrl } }] }],
-      temperature: 0.7, response_format: { type: "json_object" }
+      temperature: cfg.temperature, response_format: { type: "json_object" }
     };
     const content = await chatCompletion(cfg, headers, body);
     const layout = extractJSON(content);
@@ -467,6 +469,7 @@ function openSettings() {
   const cfg = loadCfg();
   $("cfgBaseUrl").value = cfg.baseUrl || ""; $("cfgApiKey").value = cfg.apiKey || ""; $("cfgModel").value = cfg.model || "";
   $("cfgElements").value = cfg.elements; $("cfgDesc").value = cfg.desc;
+  $("cfgTemp").value = cfg.temperature; $("cfgTempVal").textContent = (+cfg.temperature).toFixed(2);
   document.querySelectorAll("#providerSeg button").forEach(b => b.classList.toggle("active", b.dataset.p === cfg.provider));
   $("cfgPreset").value = comfyCfg.preset || "Turbo";
   $("cfgMP").value = String(comfyCfg.megapixels || 2);
@@ -475,7 +478,7 @@ function openSettings() {
 }
 function readSettings() {
   const provider = document.querySelector("#providerSeg button.active")?.dataset.p || "openrouter";
-  saveCfg({ provider, baseUrl: $("cfgBaseUrl").value.trim().replace(/\/+$/, ""), apiKey: $("cfgApiKey").value.trim(), model: $("cfgModel").value.trim(), elements: $("cfgElements").value, desc: $("cfgDesc").value });
+  saveCfg({ provider, baseUrl: $("cfgBaseUrl").value.trim().replace(/\/+$/, ""), apiKey: $("cfgApiKey").value.trim(), model: $("cfgModel").value.trim(), elements: $("cfgElements").value, desc: $("cfgDesc").value, temperature: parseFloat($("cfgTemp").value) });
   comfyCfg.preset = $("cfgPreset").value;
   comfyCfg.megapixels = numInRange($("cfgMP").value, 0.1, 16, 2);
   comfyCfg.save = $("cfgSave").checked;
@@ -493,6 +496,7 @@ $("compare").addEventListener("pointerdown", e => { if ($("compare").classList.c
 $("compare").addEventListener("pointermove", e => { if (cmpDragging) cmpUpdate(e); });
 $("compare").addEventListener("pointerup", () => { cmpDragging = false; });
 $("compare").addEventListener("pointercancel", () => { cmpDragging = false; });
+$("cfgTemp").addEventListener("input", () => { $("cfgTempVal").textContent = (+$("cfgTemp").value).toFixed(2); });
 $("settingsBtn").addEventListener("click", openSettings);
 $("settingsClose").addEventListener("click", closeSettings);
 $("settingsOverlay").addEventListener("click", e => { if (e.target === $("settingsOverlay")) closeSettings(); });
