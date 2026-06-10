@@ -14,23 +14,32 @@
     --danger: #ef4444; --success: #34d399; --r: 12px; --r-sm: 9px;
   }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-  html, body { margin: 0; overscroll-behavior-y: none; }
+  html, body { margin: 0; }
+  /* fixed-height flex shell: header + scrolling content + render bar.
+     only <main> scrolls, so nothing is anchored to the jumpy mobile viewport. */
   body {
     background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    min-height: 100vh; min-height: 100dvh; padding: env(safe-area-inset-top) 0 0;
+    height: 100vh; height: 100dvh; overflow: hidden;
+    display: flex; flex-direction: column;
+    padding: env(safe-area-inset-top) 0 0;
     -webkit-font-smoothing: antialiased;
   }
   header {
+    flex: 0 0 auto;
     display: flex; align-items: center; gap: 10px; padding: 14px 16px;
-    position: sticky; top: 0; background: rgba(11,15,21,.85); backdrop-filter: blur(8px);
+    background: rgba(11,15,21,.85); backdrop-filter: blur(8px);
     border-bottom: 1px solid var(--border); z-index: 10;
   }
   header .logo { width: 30px; height: 30px; border-radius: 7px; background: linear-gradient(135deg, var(--accent), var(--accent-2)); display: grid; place-items: center; font-size: 17px; }
   header h1 { font-size: 17px; margin: 0; font-weight: 700; letter-spacing: .2px; flex: 1; }
   header h1 span { color: var(--faint); font-weight: 400; font-size: 12px; }
-  main { padding: 16px 16px 92px; max-width: 640px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
+  main {
+    flex: 1 1 auto; min-height: 0; width: 100%; max-width: 640px; margin: 0 auto;
+    overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch;
+    padding: 16px; display: flex; flex-direction: column; gap: 16px;
+  }
   .render-bar {
-    position: fixed; left: 0; right: 0; bottom: 0; z-index: 20;
+    position: relative; flex: 0 0 auto; z-index: 20;
     padding: 8px 16px calc(8px + env(safe-area-inset-bottom));
     background: rgba(11,15,21,.92); backdrop-filter: blur(8px);
     border-top: 1px solid var(--border);
@@ -160,12 +169,6 @@
     <textarea id="extra" placeholder="e.g. dramatic sunset light, add a vintage car…"></textarea>
   </div>
 
-  <div class="render-bar" id="renderBar">
-    <button class="primary big" id="run">✨ Render</button>
-    <div class="progress" id="progress"><div id="bar"></div></div>
-    <div class="status" id="status"></div>
-  </div>
-
   <div class="card result" id="resultCard">
     <h2>Result <span class="right" id="cmpHint" style="font-weight:400; text-transform:none; letter-spacing:0; color:var(--faint);">drag to compare</span></h2>
     <div class="compare" id="compare">
@@ -187,6 +190,12 @@
     <div class="gallery" id="gallery"></div>
   </div>
 </main>
+
+<div class="render-bar" id="renderBar">
+  <button class="primary big" id="run">✨ Render</button>
+  <div class="progress" id="progress"><div id="bar"></div></div>
+  <div class="status" id="status"></div>
+</div>
 
 <!-- SETTINGS SHEET -->
 <div class="overlay" id="settingsOverlay">
