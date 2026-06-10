@@ -51,6 +51,7 @@
     backdrop-filter: blur(8px);
     border-bottom: 1px solid var(--border);
     flex-shrink: 0; z-index: 10;
+    margin-bottom:2px;
   }
   .brand { display: flex; align-items: center; gap: 10px; }
   .brand .logo {
@@ -558,6 +559,16 @@
             <input type="text" id="cf-diff">
             <label>Unconditional model (unet)</label>
             <input type="text" id="cf-uncond">
+            <label class="toggle" style="margin-top:12px;"><input type="checkbox" id="cf-lora-enabled"> Apply LoRA <span style="color:var(--faint)">(patches the diffusion model only)</span></label>
+            <div class="row2" id="cf-lora-row" style="grid-template-columns:1fr auto;">
+              <div>
+                <label>LoRA file</label>
+                <input type="text" id="cf-lora-name" list="cf-lora-list" placeholder="my_ideogram4_lora.safetensors" autocomplete="off">
+                <datalist id="cf-lora-list"></datalist>
+              </div>
+              <div><label>Strength</label><input type="number" id="cf-lora-strength" step="0.05" min="-10" max="10" style="width:6.5em;" title="LoRA model strength. 1.0 = full effect; lower softens it, negative inverts."></div>
+            </div>
+            <div class="hint">Loads a LoRA from ComfyUI's <code>models/loras/</code> (the name is the filename, including subfolders). The list autocompletes once you've tested the connection. Only the main diffusion model is patched (model-only); the text encoder and unconditional model are untouched. Leave unchecked to render the base model.</div>
             <label>VAE</label>
             <input type="text" id="cf-vae">
             <label>CLIP</label>
@@ -2076,6 +2087,21 @@ function applyPreset(name) {
   applyCanvasAspect();
 }
 function syncConnFields() { $("cf-urlRow").style.display = $("cf-direct").checked ? "block" : "none"; }
+function syncLoraFields() {
+  const on = $("cf-lora-enabled").checked;
+  $("cf-lora-row").style.opacity = on ? "" : "0.5";
+  $("cf-lora-name").disabled = $("cf-lora-strength").disabled = !on;
+}
+// Populate the LoRA autocomplete list from the installed ComfyUI's node defs.
+async function populateLoraList() {
+  const base = comfyBase();
+  if (!base) return;
+  const info = await getObjectInfo(base);
+  const spec = info && info.LoraLoaderModelOnly?.input?.required?.lora_name;
+  const names = Array.isArray(spec) && Array.isArray(spec[0]) ? spec[0] : null;
+  if (!names) return;
+  $("cf-lora-list").innerHTML = names.map(n => `<option value="${escapeHtml(n)}"></option>`).join("");
+}
 function applyComfyForm() {
   $("cf-direct").checked = comfyCfg.direct;
   $("cf-save").checked = comfyCfg.save;
@@ -2096,6 +2122,10 @@ function applyComfyForm() {
   $("cf-end").value = comfyCfg.end_percent;
   $("cf-diff").value = comfyCfg.diff_model;
   $("cf-uncond").value = comfyCfg.uncond_model;
+  $("cf-lora-enabled").checked = comfyCfg.lora_enabled;
+  $("cf-lora-name").value = comfyCfg.lora_name;
+  $("cf-lora-strength").value = comfyCfg.lora_strength;
+  syncLoraFields();
   $("cf-vae").value = comfyCfg.vae_name;
   $("cf-clip").value = comfyCfg.clip_name;
   $("cf-cliptype").value = comfyCfg.clip_type;
@@ -2118,6 +2148,9 @@ function readComfyForm() {
   comfyCfg.end_percent = parseFloat($("cf-end").value);
   comfyCfg.diff_model = $("cf-diff").value.trim();
   comfyCfg.uncond_model = $("cf-uncond").value.trim();
+  comfyCfg.lora_enabled = $("cf-lora-enabled").checked;
+  comfyCfg.lora_name = $("cf-lora-name").value.trim();
+  comfyCfg.lora_strength = parseFloat($("cf-lora-strength").value);
   comfyCfg.vae_name = $("cf-vae").value.trim();
   comfyCfg.clip_name = $("cf-clip").value.trim();
   comfyCfg.clip_type = $("cf-cliptype").value.trim();
@@ -2625,7 +2658,7 @@ function refreshSetupList() {
   const sel = $("setupSel"), s = loadSetups();
   sel.innerHTML = '<option value="">— select —</option>' + s.map((x, i) => `<option value="${i}">${escapeHtml(x.name)}</option>`).join("");
 }
-const SETUP_COMFY_KEYS = ["workflow", "aspect_ratio", "megapixels", "preset", "cfg", "sampler_name", "cfg_override", "start_percent", "end_percent", "batch_size", "diff_model", "uncond_model", "vae_name", "clip_name", "clip_type", "save"];
+const SETUP_COMFY_KEYS = ["workflow", "aspect_ratio", "megapixels", "preset", "cfg", "sampler_name", "cfg_override", "start_percent", "end_percent", "batch_size", "diff_model", "uncond_model", "lora_enabled", "lora_name", "lora_strength", "vae_name", "clip_name", "clip_type", "save"];
 function captureSetup() {
   const comfy = {};
   SETUP_COMFY_KEYS.forEach(k => comfy[k] = comfyCfg[k]);
@@ -2788,6 +2821,7 @@ async function comfyTest() {
     let extra = "";
     try { const j = await res.json(); const v = j.system && j.system.comfyui_version; if (v) extra = " · ComfyUI " + v; } catch (_) {}
     set("Connected ✓" + extra, "ok");
+    populateLoraList();
   } catch (err) {
     if (err instanceof TypeError) {
       set("Couldn't reach " + base + " — the server is down/unreachable, the URL is wrong, or the browser blocked it (CORS). Fix: run comfy_proxy.py and open the editor through it, or start ComfyUI with --enable-cors-header.", "err");
@@ -2890,9 +2924,10 @@ $("renderBtn").addEventListener("click", comfyRender);
 $("renderBtn2").addEventListener("click", comfyRender);
 $("renderCancel").addEventListener("click", cancelRender);
 $("cf-rerollSeed").addEventListener("click", () => { comfyCfg.seed = randomSeed(); $("cf-seed").value = comfyCfg.seed; saveComfyCfg(); });
-["cf-url", "cf-save", "cf-aspect", "cf-megapixels", "cf-preset", "cf-seed", "cf-randomize", "cf-cfg", "cf-sampler", "cf-cfgo", "cf-start", "cf-end", "cf-diff", "cf-uncond", "cf-vae", "cf-clip", "cf-cliptype", "cf-batch"].forEach(id => {
+["cf-url", "cf-save", "cf-aspect", "cf-megapixels", "cf-preset", "cf-seed", "cf-randomize", "cf-cfg", "cf-sampler", "cf-cfgo", "cf-start", "cf-end", "cf-diff", "cf-uncond", "cf-lora-name", "cf-lora-strength", "cf-vae", "cf-clip", "cf-cliptype", "cf-batch"].forEach(id => {
   const e = $(id); if (e) e.addEventListener("change", readComfyForm);
 });
+$("cf-lora-enabled").addEventListener("change", () => { readComfyForm(); syncLoraFields(); });
 
 setupGrid();
 sanitizeComfyCfg();
@@ -2904,6 +2939,7 @@ renderGallery();
 applyMode();
 render();
 applyCanvasAspect();
+if (comfyCfg.mode === "comfy" && comfyBase()) populateLoraList();
 </script>
 </body>
 </html>
