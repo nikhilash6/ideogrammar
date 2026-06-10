@@ -6,7 +6,7 @@ It also ships **[LLMCam](#llmcam-mobile-camera-app)** — a phone-first companio
 
 Everything lives in [`index.html`](index.html) (HTML + CSS + vanilla JS, no dependencies, no build step). [`comfy_proxy.py`](comfy_proxy.py) is an optional helper for ComfyUI mode, and [`llmcam.html`](llmcam.html) is the mobile camera app.
 
-![Ideogrammar screenshot](ideogrammar.png)
+![Ideogrammar](ideogrammar_header.png)
 
 ## Features
 
@@ -17,6 +17,7 @@ Everything lives in [`index.html`](index.html) (HTML + CSS + vanilla JS, no depe
 - **Generate prompt** — describe the image in plain language, **or upload/drop a reference image** (with a vision-capable model), and an OpenAI-compatible LLM (OpenRouter or a local `llama.cpp` server) fills in the whole schema. Settings are stored in `localStorage`.
 - **Refine** — ask the LLM to adjust the current setup with a plain-language change (e.g. "make it a lighter composition"); it rewrites the whole setup while keeping everything the request doesn't touch.
 - **ComfyUI mode** — render the current prompt on your ComfyUI server using the bundled Ideogram 4 workflow, with every workflow parameter exposed and the result (plus live progress) shown in the editor. A **✕ Cancel** button interrupts a render in progress. Renders collect in a gallery with a full-size viewer, and can be saved permanently.
+- **LoRA loader** — optionally apply a trained Ideogram 4 LoRA from the UI: tick **Apply LoRA**, pick a file (autocompleted from your ComfyUI's `models/loras/`), and set its strength. It's spliced into the workflow on the fly (model-only) and works with either scheduler; leave it off to render the base model.
 - **GPU monitor** — live GPU-utilization and VRAM graphs in the top bar (ComfyUI mode), fed by the [Crystools](https://github.com/crystian/ComfyUI-Crystools) websocket; falls back to a VRAM-only graph if Crystools isn't installed.
 - **LLMCam (mobile)** — a phone-first companion page ([`llmcam.html`](llmcam.html)): take a photo and re-render it through Ideogram keeping the composition, with one-tap transforms (faithful, time travel, art style, genre/mood) and Save/Share. See [below](#llmcam-mobile-camera-app).
 - **Import / Reset / Download** — round-trip the prompt JSON.
@@ -56,7 +57,7 @@ Coordinates are a 1000×1000 space, origin top-left, `bbox = [x1, y1, x2, y2]`.
 
 The **⚙ Settings** button (header) opens one dialog for everything not tied to a specific render:
 
-- **Text-generation model (LLM)** — provider (OpenRouter / local llama.cpp), base URL, API key, model, and a **Detail** control (how many elements the model breaks the scene into, and how verbose each element's description is). **Save named presets** of these so switching endpoints doesn't lose the model name — pick a preset from the dropdown to restore it.
+- **Text-generation model (LLM)** — provider (OpenRouter / local llama.cpp), base URL, API key, model, a **Detail** control (how many elements the model breaks the scene into, and how verbose each element's description is), and a **Temperature** slider (0–2, default 0.7 — higher = more varied output; some models ignore it). **Save named presets** of these so switching endpoints doesn't lose the model name — pick a preset from the dropdown to restore it. The same temperature setting applies to LLMCam.
 - **Vectorizer** — mask method (SAM / heuristic / none) and flatness threshold.
 - **Setups & library** — save/load/delete named **setups** (the full prompt builder state + render parameters).
 
@@ -80,6 +81,8 @@ Click **🪄 Refine** to adjust the *current* setup with a natural-language chan
 
 ## LLMCam (mobile camera app)
 
+<img src="llmcam.png" alt="LLMCam mobile camera app" align="right" width="240">
+
 [`llmcam.html`](llmcam.html) is a separate **phone-first** front-end served by the same proxy. Open `http://<lan-ip>:8189/llmcam.html` on your Android phone: **take a photo**, pick a transformation, and it runs the photo through the vision LLM (preserving the composition) and renders it through Ideogram on your ComfyUI server, then shows the result with **Save / Share**.
 
 - **Capture** uses the phone's native camera (`<input capture>`) or the gallery — works over plain LAN HTTP (the live-camera API needs HTTPS, so it's intentionally not used).
@@ -96,6 +99,8 @@ A **setup** is the whole prompt builder state (description, style, background, p
 ## ComfyUI mode
 
 ComfyUI mode renders the current prompt on your server with the bundled Ideogram 4 workflow ([`workflow.json`](workflow.json), embedded in the page). The left panel exposes every meaningful parameter — connection (proxy vs. direct), scheduler workflow, aspect ratio, megapixels, quality preset (Quality/Default/Turbo), seed (+ randomize), guidance CFG, sampler, CFG-override, batch size, and the diffusion / unconditional / VAE / CLIP model names. The **scheduler workflow** selector switches between the stock *Ideogram 4 default* (`Ideogram4Scheduler`) and a community *simple scheduler* variant (`ModelSamplingAuraFlow` shift + `BasicScheduler` "simple" + euler), which some find gives better results; switching also sets the matching recommended sampler. The editor's prompt JSON is injected into the positive-prompt node on every render. Results and live progress appear in the middle panel, and **✕ Cancel** interrupts a running render (it calls ComfyUI's `/interrupt` and drops the job from the queue). A **Test connection** button reports whether the server is reachable (and its version) or what's wrong.
+
+**LoRA (optional).** In *Advanced parameters* there's an **Apply LoRA** toggle. Enable it, pick a LoRA file (the field autocompletes from the connected server's `models/loras/` once you've run **Test connection**, or just type the filename including any subfolder), and set the **Strength** (1.0 = full effect, lower softens it, negative inverts). When enabled, a `LoraLoaderModelOnly` node is spliced between the diffusion model and its consumer — so it works with both scheduler variants — patching only the conditioned diffusion model; the unconditional/negative model and the text encoder are left untouched (the usual shape for Ideogram 4 diffusion LoRAs). The setting is saved with **setups** like every other render parameter.
 
 The middle panel also reshapes to the selected **aspect ratio** so the layout preview matches the real canvas. You lay boxes out in the editor's normalized `0–1000` space, but when a render is sent the prompt's bounding boxes are scaled into the **actual output pixel dimensions** and the text is prefixed with an explicit **orientation cue** (e.g. *"LANDSCAPE … 1776×1184 … do not rotate or mirror"*). This keeps the model's frame, the latent size, and the layout coordinates consistent — without it the model tends to squash the layout or rotate the result ~90°.
 
