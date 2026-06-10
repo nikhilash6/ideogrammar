@@ -2,7 +2,9 @@
 
 A single-file, no-build web app for composing structured **Ideogram 4** prompts. You lay out a scene visually on a 1000×1000 canvas, describe each element, and the app emits the exact JSON the Ideogram 4 model expects. It can also generate a whole setup from a one-line description — or from an uploaded reference image — via an LLM, and — in **ComfyUI mode** — render the prompt on your own ComfyUI server and show the result inline.
 
-Everything lives in [`index.html`](index.html) (HTML + CSS + vanilla JS, no dependencies, no build step). [`comfy_proxy.py`](comfy_proxy.py) is an optional helper for ComfyUI mode.
+It also ships **[LLMCam](#llmcam-mobile-camera-app)** — a phone-first companion app: snap a photo and it re-renders the scene through Ideogram with the same composition, optionally transformed (time travel, art style, genre…).
+
+Everything lives in [`index.html`](index.html) (HTML + CSS + vanilla JS, no dependencies, no build step). [`comfy_proxy.py`](comfy_proxy.py) is an optional helper for ComfyUI mode, and [`llmcam.html`](llmcam.html) is the mobile camera app.
 
 ![Ideogrammar screenshot](ideogrammar.png)
 
@@ -16,6 +18,7 @@ Everything lives in [`index.html`](index.html) (HTML + CSS + vanilla JS, no depe
 - **Refine** — ask the LLM to adjust the current setup with a plain-language change (e.g. "make it a lighter composition"); it rewrites the whole setup while keeping everything the request doesn't touch.
 - **ComfyUI mode** — render the current prompt on your ComfyUI server using the bundled Ideogram 4 workflow, with every workflow parameter exposed and the result (plus live progress) shown in the editor. A **✕ Cancel** button interrupts a render in progress. Renders collect in a gallery with a full-size viewer, and can be saved permanently.
 - **GPU monitor** — live GPU-utilization and VRAM graphs in the top bar (ComfyUI mode), fed by the [Crystools](https://github.com/crystian/ComfyUI-Crystools) websocket; falls back to a VRAM-only graph if Crystools isn't installed.
+- **LLMCam (mobile)** — a phone-first companion page ([`llmcam.html`](llmcam.html)): take a photo and re-render it through Ideogram keeping the composition, with one-tap transforms (faithful, time travel, art style, genre/mood) and Save/Share. See [below](#llmcam-mobile-camera-app).
 - **Import / Reset / Download** — round-trip the prompt JSON.
 
 ## Quick start
