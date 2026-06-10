@@ -1613,14 +1613,21 @@ function openRefineModal() {
   $("refineOverlay").classList.add("show"); $("refinePrompt").focus();
 }
 // Style-preset picker: fills the change-request with the chosen preset's guidance.
-function refineStyleChanged() {
+// Fill the textarea from the current mode + sub-option (no repopulation).
+function refineStyleSync() {
+  const m = $("refineStyleMode").value;
+  if (m) $("refinePrompt").value = styleGuidance(m, $("refineStyleSub").value);
+}
+// Mode changed: rebuild the sub-option list, then sync. (Rebuilding on every
+// change reset the sub back to the first option, so keep it to mode changes.)
+function refineModeChanged() {
   const m = $("refineStyleMode").value, subSel = $("refineStyleSub");
   const p = STYLE_PRESETS[m];
   if (p && p.options) {
     subSel.innerHTML = p.options.map(o => `<option value="${o}">${o}</option>`).join("");
     subSel.style.display = "";
   } else subSel.style.display = "none";
-  if (m) $("refinePrompt").value = styleGuidance(m, subSel.value);
+  refineStyleSync();
 }
 function closeRefineModal() { $("refineOverlay").classList.remove("show"); }
 
@@ -1800,8 +1807,8 @@ $("refineClose").addEventListener("click", closeRefineModal);
 $("refineCancel").addEventListener("click", closeRefineModal);
 $("refineRun").addEventListener("click", () => runRefine());
 $("refineRenderRun").addEventListener("click", () => runRefine({ thenRender: true }));
-$("refineStyleMode").addEventListener("change", refineStyleChanged);
-$("refineStyleSub").addEventListener("change", refineStyleChanged);
+$("refineStyleMode").addEventListener("change", refineModeChanged);
+$("refineStyleSub").addEventListener("change", refineStyleSync);
 let refinePressedSelf = false;
 $("refineOverlay").addEventListener("mousedown", e => { refinePressedSelf = (e.target === $("refineOverlay")); });
 $("refineOverlay").addEventListener("click", e => { if (e.target === $("refineOverlay") && refinePressedSelf) closeRefineModal(); });
