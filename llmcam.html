@@ -75,7 +75,15 @@
 
   .result { display: none; }
   .result.show { display: block; }
-  .result img { width: 100%; border-radius: var(--r-sm); border: 1px solid var(--border); display: block; background: #000; }
+  .compare { position: relative; width: 100%; border-radius: var(--r-sm); overflow: hidden; border: 1px solid var(--border); background: #000; touch-action: none; user-select: none; -webkit-user-select: none; cursor: ew-resize; }
+  .compare.no-before { cursor: default; }
+  .cmp-img { display: block; width: 100%; }
+  #cmpBefore { position: absolute; inset: 0; height: 100%; object-fit: cover; }
+  .cmp-divider { position: absolute; top: 0; bottom: 0; left: 50%; width: 2px; margin-left: -1px; background: rgba(255,255,255,.9); box-shadow: 0 0 5px rgba(0,0,0,.6); pointer-events: none; }
+  .cmp-handle { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); width: 36px; height: 36px; border-radius: 50%; background: rgba(255,255,255,.92); color: #111; display: flex; align-items: center; justify-content: center; font-size: 16px; box-shadow: 0 1px 5px rgba(0,0,0,.5); }
+  .cmp-tag { position: absolute; top: 8px; font-size: 10px; font-weight: 600; color: #fff; background: rgba(0,0,0,.55); padding: 2px 7px; border-radius: 5px; pointer-events: none; letter-spacing: .04em; }
+  .cmp-tag-l { left: 8px; } .cmp-tag-r { right: 8px; }
+  .compare.no-before .cmp-divider, .compare.no-before #cmpBefore, .compare.no-before .cmp-tag { display: none; }
   .result-actions { display: flex; gap: 10px; margin-top: 12px; }
   .result-actions > * { flex: 1; }
 
@@ -137,8 +145,14 @@
   <div class="status" id="status"></div>
 
   <div class="card result" id="resultCard">
-    <h2>Result</h2>
-    <img id="resultImg" alt="rendered result">
+    <h2>Result <span class="right" style="font-weight:400; text-transform:none; letter-spacing:0; color:var(--faint);">drag to compare</span></h2>
+    <div class="compare" id="compare">
+      <img id="cmpAfter" class="cmp-img" alt="rendered result">
+      <img id="cmpBefore" class="cmp-img" alt="original photo">
+      <span class="cmp-tag cmp-tag-l">Before</span>
+      <span class="cmp-tag cmp-tag-r">After</span>
+      <div class="cmp-divider" id="cmpDivider"><div class="cmp-handle">⇆</div></div>
+    </div>
     <div class="result-actions">
       <button id="shareBtn">⤴ Share</button>
       <a class="btn" id="downloadBtn" download="llmcam.png">⤓ Save</a>
@@ -334,7 +348,7 @@ async function run() {
 
     /* 3) wait for the render, then show + gallery it */
     const img = await waitForRender(base, promptId);
-    const entry = { filename: img.filename, subfolder: img.subfolder || "", type: img.type || "output", ts: Date.now() };
+    const entry = { filename: img.filename, subfolder: img.subfolder || "", type: img.type || "output", ts: Date.now(), _before: photoDataUrl };
     addToGallery(entry);
     await showEntry(entry);
     setStatus("Done ✓", "ok");
@@ -379,6 +393,18 @@ function waitForRender(base, promptId) {
   });
 }
 
+/* ---- before/after compare slider ---- */
+let cmpDragging = false;
+function setCompare(pct) {
+  pct = Math.max(0, Math.min(100, pct));
+  $("cmpBefore").style.clipPath = `inset(0 ${100 - pct}% 0 0)`;
+  $("cmpDivider").style.left = pct + "%";
+}
+function cmpUpdate(e) {
+  const r = $("compare").getBoundingClientRect();
+  if (r.width) setCompare((e.clientX - r.left) / r.width * 100);
+}
+
 let lastBlobUrl = null;
 async function showEntry(entry) {
   const url = viewUrl(entry);
@@ -386,8 +412,11 @@ async function showEntry(entry) {
   try { blob = await (await fetch(url)).blob(); blobUrl = URL.createObjectURL(blob); } catch (_) {}
   if (lastBlobUrl) { try { URL.revokeObjectURL(lastBlobUrl); } catch (_) {} }
   lastBlobUrl = blob ? blobUrl : null;
-  $("resultImg").src = blobUrl;
+  $("cmpAfter").src = blobUrl;
   $("downloadBtn").href = blobUrl;
+  const before = entry._before;
+  $("compare").classList.toggle("no-before", !before);
+  if (before) { $("cmpBefore").src = before; setCompare(50); }
   $("resultCard").classList.add("show");
   $("resultCard").scrollIntoView({ behavior: "smooth", block: "start" });
   renderGallery(entry);
@@ -410,7 +439,8 @@ let gallery = [];
 function loadGallery() { try { const a = JSON.parse(localStorage.getItem(GAL_KEY)); if (Array.isArray(a)) gallery = a; } catch (_) {} }
 function saveGallery() {
   // Only permanently-saved (output) renders survive a reload; temp ones 404.
-  let arr = gallery.filter(e => e.type === "output").slice(-GAL_MAX);
+  // Persist slim entries only — never the base64 _before photo (quota).
+  let arr = gallery.filter(e => e.type === "output").slice(-GAL_MAX).map(e => ({ filename: e.filename, subfolder: e.subfolder, type: e.type, ts: e.ts }));
   while (arr.length) { try { localStorage.setItem(GAL_KEY, JSON.stringify(arr)); return; } catch (_) { arr = arr.slice(Math.ceil(arr.length / 4)); } }
   try { localStorage.setItem(GAL_KEY, "[]"); } catch (_) {}
 }
@@ -461,6 +491,10 @@ $("fileInput").addEventListener("change", e => { handleFile(e.target.files[0]); 
 $("photoClear").addEventListener("click", clearPhoto);
 document.querySelectorAll("#modeSeg button").forEach(b => b.addEventListener("click", () => selectMode(b.dataset.mode)));
 $("run").addEventListener("click", run);
+$("compare").addEventListener("pointerdown", e => { if ($("compare").classList.contains("no-before")) return; cmpDragging = true; try { $("compare").setPointerCapture(e.pointerId); } catch (_) {} cmpUpdate(e); });
+$("compare").addEventListener("pointermove", e => { if (cmpDragging) cmpUpdate(e); });
+$("compare").addEventListener("pointerup", () => { cmpDragging = false; });
+$("compare").addEventListener("pointercancel", () => { cmpDragging = false; });
 $("settingsBtn").addEventListener("click", openSettings);
 $("settingsClose").addEventListener("click", closeSettings);
 $("settingsOverlay").addEventListener("click", e => { if (e.target === $("settingsOverlay")) closeSettings(); });

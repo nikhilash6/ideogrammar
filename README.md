@@ -85,7 +85,8 @@ Click **🪄 Refine** to adjust the *current* setup with a natural-language chan
 - **Capture** uses the phone's native camera (`<input capture>`) or the gallery — works over plain LAN HTTP (the live-camera API needs HTTPS, so it's intentionally not used).
 - **Transformations**: *Faithful* (same scene, Ideogram render), *Time travel* (period-accurate eras), *Art style* (oil/anime/pixel/…), *Genre / mood* (cyberpunk/noir/fantasy/…), plus a free-text box. Each keeps the original composition and changes only what's depicted. The captured photo stays loaded, so you can pick a different transform and tap **Render** again to re-style the *same* shot — no re-capture.
 - **Aspect** auto-matches the photo's orientation by default.
-- **Gallery** — every render is kept in a thumbnail strip; tap one to reopen it (with Save/Share). Permanently-saved renders persist across reloads (its own `localStorage`, separate from the editor's gallery).
+- **Before/after compare** — the result is shown in a draggable slider; drag across it to wipe between the original photo and the Ideogram render.
+- **Gallery** — every render is kept in a thumbnail strip; tap one to reopen it (with Save/Share, and the compare slider for renders made this session). Permanently-saved renders persist across reloads (its own `localStorage`, separate from the editor's gallery).
 - It **shares the same engine and `localStorage` config** as the main editor (both load [`llmcore.js`](llmcore.js); LLM provider/key/model, quality preset), and reaches ComfyUI through the proxy that served the page — so there's nothing extra to configure if the main app already works on that device. Needs a **vision-capable** model.
 
 ## Setups & library
