@@ -233,6 +233,27 @@ function comfyBase() {
   return (comfyCfg.url || "").trim().replace(/\/+$/, "");
 }
 
+// Reference-image cache on the proxy (for the before/after compare slider): upload
+// a data URL and get back a short content-addressed key, so the browser persists
+// only the key instead of a base64 blob. Returns null if the proxy can't store it
+// (e.g. direct-to-ComfyUI mode) — callers then fall back to the in-memory data URL.
+const _refImgKeyCache = new Map();   // dataURL -> key (avoid re-uploading the same image)
+async function uploadRefImage(dataUrl) {
+  if (!dataUrl || !/^data:/.test(dataUrl)) return null;
+  if (_refImgKeyCache.has(dataUrl)) return _refImgKeyCache.get(dataUrl);
+  const base = comfyBase();
+  if (!base) return null;
+  try {
+    const blob = await (await fetch(dataUrl)).blob();
+    const r = await fetch(base + "/ideogrammar/refimg", { method: "POST", headers: { "Content-Type": blob.type || "image/jpeg" }, body: blob });
+    if (!r.ok) return null;
+    const key = (await r.json()).key || null;
+    if (key) _refImgKeyCache.set(dataUrl, key);
+    return key;
+  } catch (_) { return null; }
+}
+function refImgUrl(key) { return key ? (comfyBase() + "/ideogrammar/refimg/" + encodeURIComponent(key)) : null; }
+
 // Keep a value if it's a finite number within [lo,hi]; otherwise fall back.
 function numInRange(v, lo, hi, dflt) {
   const n = parseFloat(v);

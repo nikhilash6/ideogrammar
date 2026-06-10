@@ -279,6 +279,68 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    # ---- reference-image cache (for the editor's before/after compare slider) ----
+    # The editor uploads the image a setup was generated from; we store it
+    # content-addressed and hand back a short key, so the browser persists only
+    # the key (not a base64 blob) and the compare survives reloads / the 300-entry
+    # history cap. Files are tiny downscaled JPEGs.
+    def _ref_dir(self):
+        d = ARGS.ref_dir
+        if not d:
+            return None
+        try:
+            os.makedirs(d, exist_ok=True)
+            return d
+        except Exception:
+            return None
+
+    def _store_refimg(self):
+        d = self._ref_dir()
+        if not d:
+            self._json_error(500, "Reference-image cache directory is not writable")
+            return
+        length = int(self.headers.get("Content-Length", 0) or 0)
+        if length <= 0 or length > 32 * 1024 * 1024:
+            self._json_error(400, "Empty or oversized image (max 32 MB)")
+            return
+        data = self.rfile.read(length)
+        ctype = (self.headers.get("Content-Type") or "image/jpeg").split(";")[0].strip().lower()
+        ext = {"image/jpeg": ".jpg", "image/jpg": ".jpg", "image/png": ".png", "image/webp": ".webp"}.get(ctype, ".jpg")
+        key = hashlib.sha256(data).hexdigest()[:32] + ext
+        path = os.path.join(d, key)
+        if not os.path.exists(path):
+            try:
+                with open(path, "wb") as f:
+                    f.write(data)
+            except Exception as e:
+                self._json_error(500, "Could not store image: %s" % e)
+                return
+        self._send_json({"key": key})
+
+    def _serve_refimg(self, key):
+        d = ARGS.ref_dir
+        key = unquote(key or "")
+        if not d or not re.fullmatch(r"[A-Fa-f0-9]{1,64}\.(jpg|png|webp)", key):
+            self.send_error(404)
+            return
+        path = os.path.join(d, key)
+        if not os.path.isfile(path):
+            self.send_error(404)
+            return
+        try:
+            with open(path, "rb") as f:
+                body = f.read()
+        except OSError:
+            self.send_error(404)
+            return
+        self.send_response(200)
+        self.send_header("Content-Type", mimetypes.guess_type(path)[0] or "application/octet-stream")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "public, max-age=31536000, immutable")
+        self._cors()
+        self.end_headers()
+        self.wfile.write(body)
+
     def _serve_file(self, fpath):
         ctype = mimetypes.guess_type(fpath)[0] or "application/octet-stream"
         try:
@@ -310,6 +372,9 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/ideogrammar/outputs":
             self._list_outputs()
             return
+        if path.startswith("/ideogrammar/refimg/"):
+            self._serve_refimg(path[len("/ideogrammar/refimg/"):])
+            return
         if path in ("/", "/index.html"):
             self._serve_index()
             return
@@ -320,8 +385,12 @@ class Handler(BaseHTTPRequestHandler):
         self._proxy()
 
     def do_POST(self):
-        if self.path.split("?", 1)[0] == "/vectorize":
+        p = self.path.split("?", 1)[0]
+        if p == "/vectorize":
             self._vectorize()
+            return
+        if p == "/ideogrammar/refimg":
+            self._store_refimg()
             return
         self._proxy()
 
@@ -765,6 +834,7 @@ def main():
     p.add_argument("--port", type=int, default=int(os.environ.get("PROXY_PORT", "8189")), help="port to serve on (env: PROXY_PORT)")
     p.add_argument("--html", default=os.path.join(here, "index.html"), help="path to index.html")
     p.add_argument("--output-dir", default="", help="ComfyUI output/ folder (readable by this proxy) — enables gallery recovery via the editor's Rescan button, surviving ComfyUI restarts")
+    p.add_argument("--ref-dir", default=os.environ.get("IDEOGRAMMAR_REF_DIR", os.path.join(here, ".ideogrammar_refimg")), help="where to cache reference images for the before/after compare slider (env: IDEOGRAMMAR_REF_DIR)")
     p.add_argument("--timeout", type=float, default=600.0, help="upstream timeout (s)")
     p.add_argument("--verbose", action="store_true", help="log every request")
     ARGS = p.parse_args()
@@ -778,6 +848,7 @@ def main():
     if ARGS.output_dir:
         ok = os.path.isdir(ARGS.output_dir)
         print("  output dir: %s%s" % (ARGS.output_dir, "" if ok else "  (NOT a readable folder — gallery recovery disabled)"))
+    print("  ref images: %s" % ARGS.ref_dir)
     print("  editor Server URL: leave blank (uses this origin) or set %s" % url.rstrip("/"))
     _sam_ckpt = os.environ.get("SAM_CHECKPOINT")
     if not _sam_ckpt:

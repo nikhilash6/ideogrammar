@@ -1462,7 +1462,7 @@ function doDownload() {
 function doImport(file) {
   const reader = new FileReader();
   reader.onload = () => {
-    try { loadFromJSON(JSON.parse(reader.result)); sourceImageDataUrl = null; toast("Imported ✓", "ok"); }
+    try { loadFromJSON(JSON.parse(reader.result)); sourceImageDataUrl = null; sourceImageRef = null; toast("Imported ✓", "ok"); }
     catch (err) { toast("Invalid JSON: " + err.message, "bad"); }
   };
   reader.readAsText(file);
@@ -1553,6 +1553,7 @@ const ELEMENT_REFINE_SYSTEM_PROMPT = `You rewrite ONE element's description for 
 let generating = false;
 let genImageDataUrl = null;   // base64 data URL of an uploaded reference image, or null
 let sourceImageDataUrl = null;   // reference image the current setup was generated from (for the render compare slider); null if text-only / reset
+let sourceImageRef = null;       // proxy cache key for that image (persists the compare slider across reloads); null if not (yet) uploaded
 
 async function runGeneration() {
   if (generating) return;
@@ -1600,6 +1601,8 @@ async function runGeneration() {
     if (!parsed) throw new Error("Could not parse JSON from the model's reply.");
     loadFromJSON(parsed);
     sourceImageDataUrl = genImageDataUrl || null;   // remember it so renders can compare against the reference
+    sourceImageRef = null;
+    if (sourceImageDataUrl) uploadRefImage(sourceImageDataUrl).then(k => { sourceImageRef = k; });   // cache on the proxy for persistence
     setGenStatus("Generated ✓", "ok");
     toast("Setup generated ✓", "ok");
     setTimeout(closeGenModal, 600);
@@ -1819,7 +1822,7 @@ $("copyBtn").addEventListener("click", doCopy);
 $("copyBtn2").addEventListener("click", doCopy);
 $("downloadBtn").addEventListener("click", doDownload);
 $("downloadBtn2").addEventListener("click", doDownload);
-$("resetBtn").addEventListener("click", () => { if (confirm("Reset to the default example? Current work will be lost.")) { state = defaultState(); selectedId = null; sourceImageDataUrl = null; render(); } });
+$("resetBtn").addEventListener("click", () => { if (confirm("Reset to the default example? Current work will be lost.")) { state = defaultState(); selectedId = null; sourceImageDataUrl = null; sourceImageRef = null; render(); } });
 $("importBtn").addEventListener("click", () => $("fileInput").click());
 $("fileInput").addEventListener("change", e => { if (e.target.files[0]) doImport(e.target.files[0]); e.target.value = ""; });
 $("gridToggle").addEventListener("change", renderCanvas);
@@ -2346,7 +2349,7 @@ async function showResult(base, promptId) {
   let img = null;
   for (const nodeId of Object.keys(outputs)) { const o = outputs[nodeId]; if (o.images && o.images.length) { img = o.images[o.images.length - 1]; break; } }
   if (!img) throw new Error("Render finished but produced no image.");
-  const entry = { filename: img.filename, subfolder: img.subfolder || "", type: img.type || "output", seed: comfyCfg.seed, aspect: comfyCfg.aspect_ratio, ts: Date.now(), time: new Date().toLocaleTimeString(), rotation: 0, setup: lastRenderSetup, elements: state.elements.map(e => ({ type: e.type, bbox: e.bbox.slice() })), _before: sourceImageDataUrl || null };
+  const entry = { filename: img.filename, subfolder: img.subfolder || "", type: img.type || "output", seed: comfyCfg.seed, aspect: comfyCfg.aspect_ratio, ts: Date.now(), time: new Date().toLocaleTimeString(), rotation: 0, setup: lastRenderSetup, elements: state.elements.map(e => ({ type: e.type, bbox: e.bbox.slice() })), _before: sourceImageDataUrl || null, _beforeRef: sourceImageRef || null };
   // Remember the produced image so a saved setup can show it again later.
   lastRenderImage = { filename: entry.filename, subfolder: entry.subfolder, type: entry.type, rotation: 0, aspect: entry.aspect };
   if (entry.setup) entry.setup.render = lastRenderImage;
@@ -2358,6 +2361,14 @@ async function showResult(base, promptId) {
   setRenderStatus("Done ✓ · seed " + comfyCfg.seed + (comfyCfg.save ? " · saved" : ""), "ok");
   toast("Render complete ✓", "ok");
   addRenderToHistory(entry);
+  ensureRefForEntry(entry);
+}
+// Upload the entry's reference image to the proxy (if not already) so the compare
+// slider persists across reloads via a short key rather than a base64 blob.
+async function ensureRefForEntry(entry) {
+  if (!entry || entry._beforeRef || !entry._before) return;
+  const key = sourceImageRef || await uploadRefImage(entry._before);
+  if (key) { entry._beforeRef = key; saveRenderHistory(); }
 }
 
 /* ---- render gallery + full-image viewer (session history) ---- */
@@ -2623,7 +2634,8 @@ function imgCmpUpdate(e) {
 async function refreshViewerImage(it) {
   const deg = it.rotation || 0;
   const pos = sortedIndices().indexOf(viewerIndex);
-  const canCmp = !!it._before && !deg;
+  const before = it._before || refImgUrl(it._beforeRef);   // in-memory data URL, or the proxy-cached reference
+  const canCmp = !!before && !deg;
   $("imgInfo").textContent = `#${pos + 1} of ${renderHistory.length} · seed ${it.seed} · ${it.aspect}` + (deg ? ` · rot ${deg}°` : "") + (it.time ? " · " + it.time : "") + (canCmp ? " · drag to compare" : "");
   let u;
   try { u = await bakeRotated(viewUrl(it), deg); } catch (_) { u = viewUrl(it); }
@@ -2632,7 +2644,7 @@ async function refreshViewerImage(it) {
   $("imgDownload").download = "ideogram-" + it.seed + (deg ? "-rot" + deg : "") + ".png";
   imgCmpOn = canCmp;
   $("imgCmp").classList.toggle("cmp-on", canCmp);
-  if (canCmp) { $("imgFullBefore").src = it._before; setImgCmp(0); }   // full render first; drag right to reveal the original
+  if (canCmp) { $("imgFullBefore").src = before; setImgCmp(0); }   // full render first; drag right to reveal the original
   else $("imgFullBefore").removeAttribute("src");
 }
 async function rotateViewer(delta) {
@@ -2797,7 +2809,7 @@ function showRenderInPreview(ref) {
   if (ref.rotation) bakeRotated(viewUrl(ref), ref.rotation).then(u => { el.src = u; }).catch(() => { el.src = viewUrl(ref); });
   else el.src = viewUrl(ref);
 }
-function applySetup(s, beforeImage) {
+function applySetup(s, beforeImage, beforeRef) {
   if (!s) return;
   const sd = s.style_description || {};
   state = {
@@ -2816,6 +2828,7 @@ function applySetup(s, beforeImage) {
   if (s.comfy) SETUP_COMFY_KEYS.forEach(k => { if (k in s.comfy) comfyCfg[k] = s.comfy[k]; });
   selectedId = null;
   sourceImageDataUrl = beforeImage || s.sourceImage || null;   // restore the reference image (compare slider, and so re-renders keep it)
+  sourceImageRef = beforeRef || s.sourceImageRef || null;
   saveComfyCfg();
   applyComfyForm();
   applyCanvasAspect();
@@ -2832,25 +2845,31 @@ function applySetup(s, beforeImage) {
         seed: (s.comfy && s.comfy.seed != null) ? s.comfy.seed : "?",
         aspect: ref.aspect || (s.comfy && s.comfy.aspect_ratio) || comfyCfg.aspect_ratio,
         ts: Date.now(), rotation: ref.rotation || 0,
-        setup: (({ sourceImage, ...rest }) => rest)(s),   // keep _before off the persisted setup
-        _before: sourceImageDataUrl || null
+        setup: (({ sourceImage, ...rest }) => rest)(s),   // keep the base64 reference off the persisted setup
+        _before: sourceImageDataUrl || null, _beforeRef: sourceImageRef || null
       });
       idx = renderHistory.length - 1;
       saveRenderHistory();
       renderGallery();
-    } else if (idx >= 0 && sourceImageDataUrl) {
-      renderHistory[idx]._before = sourceImageDataUrl;
+    } else if (idx >= 0 && (sourceImageDataUrl || sourceImageRef)) {
+      if (sourceImageDataUrl) renderHistory[idx]._before = sourceImageDataUrl;
+      if (sourceImageRef) renderHistory[idx]._beforeRef = sourceImageRef;
     }
   }
   showRenderInPreview(ref);   // records previewRenderRef so clicking the preview opens this render
   toast("Setup loaded ✓", "ok");
 }
-function saveCurrentSetup() {
+async function saveCurrentSetup() {
   const name = prompt("Setup name:", (state.high_level_description || "setup").slice(0, 48));
   if (!name) return;
   const arr = loadSetups();
   const setup = captureSetup();
-  if (sourceImageDataUrl) setup.sourceImage = sourceImageDataUrl;   // keep the reference image so the compare slider survives reload
+  // Keep the reference image so the compare slider survives reload — prefer the
+  // proxy cache key (tiny); only fall back to an inline base64 copy if the proxy
+  // can't store it (e.g. direct-to-ComfyUI mode).
+  const ref = sourceImageRef || (sourceImageDataUrl ? await uploadRefImage(sourceImageDataUrl) : null);
+  if (ref) setup.sourceImageRef = ref;
+  else if (sourceImageDataUrl) setup.sourceImage = sourceImageDataUrl;
   const entry = { name: name.trim(), ts: new Date().toLocaleString(), setup };
   const idx = arr.findIndex(x => x.name === entry.name);
   if (idx >= 0) arr[idx] = entry; else arr.push(entry);
@@ -3016,8 +3035,8 @@ $("llmPresetDel").addEventListener("click", deleteSelectedLlmPreset);
 $("setupLoad").addEventListener("click", loadSelectedSetup);
 $("setupSaveBtn").addEventListener("click", saveCurrentSetup);
 $("setupDel").addEventListener("click", deleteSelectedSetup);
-$("imgLoadSetup").addEventListener("click", () => { const it = renderHistory[viewerIndex]; if (it && it.setup) { applySetup(it.setup, it._before); closeImgModal(); } else toast("This render has no saved setup.", "bad"); });
-$("imgRefine").addEventListener("click", () => { const it = renderHistory[viewerIndex]; if (it && it.setup) { applySetup(it.setup, it._before); closeImgModal(); openRefineModal(); } else toast("This render has no saved setup.", "bad"); });
+$("imgLoadSetup").addEventListener("click", () => { const it = renderHistory[viewerIndex]; if (it && it.setup) { applySetup(it.setup, it._before, it._beforeRef); closeImgModal(); } else toast("This render has no saved setup.", "bad"); });
+$("imgRefine").addEventListener("click", () => { const it = renderHistory[viewerIndex]; if (it && it.setup) { applySetup(it.setup, it._before, it._beforeRef); closeImgModal(); openRefineModal(); } else toast("This render has no saved setup.", "bad"); });
 let settingsOverlayPressedSelf = false;
 $("settingsOverlay").addEventListener("mousedown", e => { settingsOverlayPressedSelf = (e.target === $("settingsOverlay")); });
 $("settingsOverlay").addEventListener("click", e => { if (e.target === $("settingsOverlay") && settingsOverlayPressedSelf) closeSettings(); });
