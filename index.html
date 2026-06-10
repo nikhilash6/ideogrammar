@@ -2788,7 +2788,7 @@ function showRenderInPreview(ref) {
   if (ref.rotation) bakeRotated(viewUrl(ref), ref.rotation).then(u => { el.src = u; }).catch(() => { el.src = viewUrl(ref); });
   else el.src = viewUrl(ref);
 }
-function applySetup(s) {
+function applySetup(s, beforeImage) {
   if (!s) return;
   const sd = s.style_description || {};
   state = {
@@ -2806,19 +2806,34 @@ function applySetup(s) {
   };
   if (s.comfy) SETUP_COMFY_KEYS.forEach(k => { if (k in s.comfy) comfyCfg[k] = s.comfy[k]; });
   selectedId = null;
-  sourceImageDataUrl = s.sourceImage || null;   // restore the reference image (compare slider, and so re-renders keep it)
+  sourceImageDataUrl = beforeImage || s.sourceImage || null;   // restore the reference image (compare slider, and so re-renders keep it)
   saveComfyCfg();
   applyComfyForm();
   applyCanvasAspect();
   render();
   const ref = findRenderForSetup(s);
-  showRenderInPreview(ref);   // records previewRenderRef so clicking the preview opens this render
-  // If we have the reference image, attach it to the matching history render so
-  // opening it (preview or film strip) shows the compare slider.
-  if (ref && ref.filename && sourceImageDataUrl) {
-    const idx = historyIndexOf(ref);
-    if (idx >= 0) renderHistory[idx]._before = sourceImageDataUrl;
+  // Make the setup's render openable with its compare slider: attach the
+  // reference image to the matching history entry, or add the render to history
+  // if it isn't there (e.g. a named setup loaded in a later session).
+  if (ref && ref.filename) {
+    let idx = historyIndexOf(ref);
+    if (idx < 0 && (ref.type || "output") === "output") {
+      renderHistory.push({
+        filename: ref.filename, subfolder: ref.subfolder || "", type: ref.type || "output",
+        seed: (s.comfy && s.comfy.seed != null) ? s.comfy.seed : "?",
+        aspect: ref.aspect || (s.comfy && s.comfy.aspect_ratio) || comfyCfg.aspect_ratio,
+        ts: Date.now(), rotation: ref.rotation || 0,
+        setup: (({ sourceImage, ...rest }) => rest)(s),   // keep _before off the persisted setup
+        _before: sourceImageDataUrl || null
+      });
+      idx = renderHistory.length - 1;
+      saveRenderHistory();
+      renderGallery();
+    } else if (idx >= 0 && sourceImageDataUrl) {
+      renderHistory[idx]._before = sourceImageDataUrl;
+    }
   }
+  showRenderInPreview(ref);   // records previewRenderRef so clicking the preview opens this render
   toast("Setup loaded ✓", "ok");
 }
 function saveCurrentSetup() {
@@ -2992,8 +3007,8 @@ $("llmPresetDel").addEventListener("click", deleteSelectedLlmPreset);
 $("setupLoad").addEventListener("click", loadSelectedSetup);
 $("setupSaveBtn").addEventListener("click", saveCurrentSetup);
 $("setupDel").addEventListener("click", deleteSelectedSetup);
-$("imgLoadSetup").addEventListener("click", () => { const it = renderHistory[viewerIndex]; if (it && it.setup) { applySetup(it.setup); if (it._before) sourceImageDataUrl = it._before; closeImgModal(); } else toast("This render has no saved setup.", "bad"); });
-$("imgRefine").addEventListener("click", () => { const it = renderHistory[viewerIndex]; if (it && it.setup) { applySetup(it.setup); if (it._before) sourceImageDataUrl = it._before; closeImgModal(); openRefineModal(); } else toast("This render has no saved setup.", "bad"); });
+$("imgLoadSetup").addEventListener("click", () => { const it = renderHistory[viewerIndex]; if (it && it.setup) { applySetup(it.setup, it._before); closeImgModal(); } else toast("This render has no saved setup.", "bad"); });
+$("imgRefine").addEventListener("click", () => { const it = renderHistory[viewerIndex]; if (it && it.setup) { applySetup(it.setup, it._before); closeImgModal(); openRefineModal(); } else toast("This render has no saved setup.", "bad"); });
 let settingsOverlayPressedSelf = false;
 $("settingsOverlay").addEventListener("mousedown", e => { settingsOverlayPressedSelf = (e.target === $("settingsOverlay")); });
 $("settingsOverlay").addEventListener("click", e => { if (e.target === $("settingsOverlay") && settingsOverlayPressedSelf) closeSettings(); });
