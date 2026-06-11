@@ -146,7 +146,9 @@
     width: 34px; height: 32px; padding: 0;
     display: inline-flex; align-items: center; justify-content: center;
   }
-  .btn-row svg, .hlink svg { width: 17px; height: 17px; display: block; }
+  .btn-row svg, .hlink svg { width: 17px; height: 17px; display: block; flex-shrink: 0; }
+  /* buttons that keep a visible text label next to the icon */
+  .btn-row button.has-label { width: auto; padding: 0 13px; gap: 7px; }
   .hlink {
     background: var(--elevated); color: var(--text);
     border: 1px solid var(--border-strong); border-radius: var(--r-sm);
@@ -386,18 +388,21 @@
   </div>
   <div class="header-bottom">
     <div class="seg" id="modeSeg" title="Manual = copy the JSON yourself · ComfyUI = render it on your server">
-      <button type="button" data-mode="manual">Manual</button>
-      <button type="button" data-mode="comfy">ComfyUI</button>
+      <button type="button" data-mode="manual" title="Manual — copy the JSON yourself">Manual</button>
+      <button type="button" data-mode="comfy" title="ComfyUI — render it on your server">ComfyUI</button>
     </div>
     <div class="btn-row">
-      <button class="primary comfy-only" id="renderBtn" title="Render on your ComfyUI server" aria-label="Render">
+      <button class="primary comfy-only has-label" id="renderBtn" title="Render on your ComfyUI server" aria-label="Render">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>
+        <span>Render</span>
       </button>
-      <button class="primary" id="generateBtn" title="Generate prompt" aria-label="Generate prompt">
+      <button class="primary has-label" id="generateBtn" title="Generate prompt" aria-label="Generate prompt">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/><path d="M20 3v4"/><path d="M22 5h-4"/><path d="M4 17v2"/><path d="M5 18H3"/></svg>
+        <span>Generate prompt</span>
       </button>
-      <button id="refineBtn" title="Ask the model to adjust the current setup" aria-label="Refine">
+      <button class="has-label" id="refineBtn" title="Ask the model to adjust the current setup" aria-label="Refine">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.64 3.64-1.28-1.28a1.21 1.21 0 0 0-1.72 0L2.36 18.64a1.21 1.21 0 0 0 0 1.72l1.28 1.28a1.2 1.2 0 0 0 1.72 0L21.64 5.36a1.2 1.2 0 0 0 0-1.72Z"/><path d="m14 7 3 3"/><path d="M5 6v4"/><path d="M19 14v4"/><path d="M10 2v2"/><path d="M7 8H3"/><path d="M21 16h-4"/><path d="M11 3H9"/></svg>
+        <span>Refine</span>
       </button>
       <button id="importBtn" title="Import JSON" aria-label="Import">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="m8 11 4 4 4-4"/><path d="M8 5H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-4"/></svg>
