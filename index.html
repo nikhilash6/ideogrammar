@@ -172,6 +172,23 @@
   .swatch:hover .x { display: block; }
   .add-swatch { width: 30px; height: 30px; border-radius: var(--r); border: 1px dashed var(--border-strong); background: transparent; color: var(--muted); font-size: 17px; line-height: 1; padding: 0; display: flex; align-items: center; justify-content: center; }
   .add-swatch:hover { color: var(--text); border-color: var(--accent); transform: none; }
+  /* ---------- font-style picker ---------- */
+  .font-presets { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+  .font-chip {
+    padding: 5px 11px; border: 1px solid var(--border-strong); border-radius: var(--r-sm);
+    background: var(--bg); color: var(--text); cursor: pointer; font-size: 15px; line-height: 1.15;
+    white-space: nowrap;
+  }
+  .font-chip:hover { border-color: var(--accent); }
+  .font-chip.sel { border-color: var(--accent); background: var(--accent); color: #fff; }
+  /* ---------- preset palette picker ---------- */
+  .palette-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+  .pal-card { border: 1px solid var(--border); border-radius: var(--r); padding: 6px; cursor: pointer; background: var(--bg); transition: border-color .12s; }
+  .pal-card:hover { border-color: var(--accent); }
+  .pal-card.sel { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+  .pal-strip { display: flex; height: 34px; border-radius: var(--r-sm); overflow: hidden; }
+  .pal-strip span { flex: 1; }
+  .pal-name { font-size: 11px; color: var(--muted); margin-top: 5px; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
   /* ---------- element cards ---------- */
   .el-tools { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
@@ -484,6 +501,7 @@
         <input type="text" id="st-medium">
         <label>Color palette</label>
         <div class="palette" id="st-palette"></div>
+        <button type="button" id="st-palette-presets" class="ghost" style="margin-top:8px;padding:5px 11px;font-size:12px;">🎨 Preset palettes…</button>
       </div>
     </section>
 
@@ -798,6 +816,26 @@
   </div>
 </div>
 
+<!-- PRESET PALETTE MODAL -->
+<div class="overlay" id="paletteOverlay">
+  <div class="modal" style="max-width:680px;">
+    <div class="modal-head">
+      <h2>🎨 Preset color palettes</h2>
+      <button class="close" id="paletteClose">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="hint" style="margin-bottom:12px;">Pick a palette, then choose where to apply it. Curated colorhunt-style sets — you can still tweak individual swatches afterwards.</div>
+      <div id="paletteGrid" class="palette-grid"></div>
+    </div>
+    <div class="modal-foot">
+      <span class="status" id="paletteStatus" style="flex:1;"></span>
+      <button id="paletteCancel">Cancel</button>
+      <button id="paletteApplyAll" disabled title="Set the image palette and clear every element's own colors so the whole image follows this palette">Apply to whole image</button>
+      <button class="primary" id="paletteApplyStyle" disabled title="Set the image's main palette; elements keep their own colors">Apply to style palette</button>
+    </div>
+  </div>
+</div>
+
 <!-- SETTINGS MODAL -->
 <div class="overlay" id="settingsOverlay">
   <div class="modal" style="max-width:560px;">
@@ -933,6 +971,7 @@ function emptyElement(seed = {}) {
     type: seed.type ?? "obj",
     bbox: seed.bbox ?? [100, 100, 500, 500],
     desc: seed.desc ?? "",
+    font: seed.font ?? "",
     color_palette: seed.color_palette ?? ["#FFFFFF"],
     vectorize: seed.vectorize ?? "auto",
     enabled: seed.enabled !== false,   // off elements stay in the setup but drop out of the prompt
@@ -963,6 +1002,70 @@ let selectedId = null;
 
 const BOX_COLORS = ["#6366F1", "#F43F5E", "#34D399", "#F59E0B", "#A855F7", "#06B6D4", "#84CC16", "#EC4899", "#3B82F6", "#F97316"];
 function boxColor(i) { return BOX_COLORS[i % BOX_COLORS.length]; }
+
+/* ---- Font-style presets (text/logo elements) ----
+   Ideogram has no named fonts, so each preset is a phrase injected into the
+   element's "font" field; `css` is only an approximate web font for the
+   on-screen preview chip (loaded lazily, see ensureFontPreviewCss). */
+const FONT_PRESETS = [
+  { name: "Bold Sans",     prompt: "bold geometric sans-serif lettering",            css: "'Montserrat', sans-serif",        weight: 800 },
+  { name: "Clean Sans",    prompt: "clean modern sans-serif lettering",              css: "'Inter', system-ui, sans-serif",  weight: 600 },
+  { name: "Elegant Serif", prompt: "elegant high-contrast serif lettering",          css: "'Playfair Display', serif",       weight: 700 },
+  { name: "Classic Serif", prompt: "classic refined serif lettering",                css: "'Lora', serif",                   weight: 600 },
+  { name: "Slab Serif",    prompt: "sturdy slab-serif lettering",                    css: "'Roboto Slab', serif",            weight: 700 },
+  { name: "Art Deco",      prompt: "elegant art-deco condensed uppercase lettering", css: "'Poiret One', sans-serif",        weight: 400 },
+  { name: "Retro 70s",     prompt: "groovy 1970s rounded retro display lettering",   css: "'Righteous', sans-serif",         weight: 400 },
+  { name: "Script",        prompt: "flowing elegant calligraphic script lettering",  css: "'Great Vibes', cursive",          weight: 400 },
+  { name: "Brush",         prompt: "hand-painted brush script lettering",            css: "'Caveat', cursive",               weight: 700 },
+  { name: "Marker",        prompt: "casual handwritten marker lettering",            css: "'Permanent Marker', cursive",     weight: 400 },
+  { name: "Techno Mono",   prompt: "monospaced techno lettering",                    css: "'Space Mono', monospace",         weight: 700 },
+  { name: "Futuristic",    prompt: "futuristic geometric sci-fi lettering",          css: "'Orbitron', sans-serif",          weight: 700 },
+  { name: "Comic",         prompt: "bold playful comic-book lettering",              css: "'Bangers', cursive",              weight: 400 },
+  { name: "Western",       prompt: "vintage western slab lettering",                 css: "'Rye', cursive",                  weight: 400 }
+];
+let _fontPreviewLoaded = false;
+function ensureFontPreviewCss() {
+  if (_fontPreviewLoaded) return;
+  _fontPreviewLoaded = true;
+  const l = document.createElement("link");
+  l.rel = "stylesheet";
+  l.href = "https://fonts.googleapis.com/css2?family=Montserrat:wght@800&family=Inter:wght@600&family=Playfair+Display:wght@700&family=Lora:wght@600&family=Roboto+Slab:wght@700&family=Poiret+One&family=Righteous&family=Great+Vibes&family=Caveat:wght@700&family=Permanent+Marker&family=Space+Mono:wght@700&family=Orbitron:wght@700&family=Bangers&family=Rye&display=swap";
+  document.head.appendChild(l);
+}
+
+/* ---- Curated color-palette presets (colorhunt-style 4-color sets) ---- */
+const PALETTE_PRESETS = [
+  { name: "Sunset Glow",       colors: ["#FF9A8B", "#FF6A88", "#FF99AC", "#FCB69F"] },
+  { name: "Deep Ocean",        colors: ["#0B132B", "#1C2541", "#3A506B", "#5BC0BE"] },
+  { name: "Forest",            colors: ["#2D6A4F", "#40916C", "#74C69D", "#D8F3DC"] },
+  { name: "Autumn",            colors: ["#582F0E", "#7F4F24", "#A68A64", "#DDA15E"] },
+  { name: "Berry",             colors: ["#590D22", "#A4133C", "#FF4D6D", "#FFB3C1"] },
+  { name: "Mint Fresh",        colors: ["#EAF4F4", "#CCE3DE", "#A4C3B2", "#6B9080"] },
+  { name: "Royal Purple",      colors: ["#240046", "#5A189A", "#9D4EDD", "#E0AAFF"] },
+  { name: "Coral Reef",        colors: ["#FF6F61", "#FFB997", "#FFD9A0", "#2EC4B6"] },
+  { name: "Monochrome",        colors: ["#0D0D0D", "#404040", "#BFBFBF", "#F2F2F2"] },
+  { name: "Pastel Dream",      colors: ["#FBF8CC", "#FDE4CF", "#F1C0E8", "#CFBAF0"] },
+  { name: "Cyberpunk",         colors: ["#0D0221", "#261447", "#FF206E", "#FBFF12"] },
+  { name: "Earth Tones",       colors: ["#582F0E", "#936639", "#B6AD90", "#C2C5AA"] },
+  { name: "Sky",               colors: ["#03045E", "#0077B6", "#00B4D8", "#90E0EF"] },
+  { name: "Rose Gold",         colors: ["#9A6A4A", "#B76E79", "#EACDD2", "#F7E7CE"] },
+  { name: "Lemonade",          colors: ["#F9F7C9", "#F6F19D", "#FFE45E", "#FFC300"] },
+  { name: "Lavender",          colors: ["#E0C3FC", "#C8A2C8", "#9F86C0", "#5E548E"] },
+  { name: "Tropical",          colors: ["#FE6D73", "#FFCB77", "#17C3B2", "#227C9D"] },
+  { name: "Vintage",           colors: ["#D9CAB3", "#B6A28E", "#8C7B6B", "#5C5346"] },
+  { name: "Neon Night",        colors: ["#0F0F0F", "#FF00FF", "#00FFFF", "#FFFF00"] },
+  { name: "Cherry Blossom",    colors: ["#FFC8DD", "#FFAFCC", "#BDE0FE", "#A2D2FF"] },
+  { name: "Desert",            colors: ["#EDC9AF", "#E0A458", "#A15C38", "#5E2C04"] },
+  { name: "Emerald",           colors: ["#012A2D", "#024B30", "#06A77D", "#A8E6CF"] },
+  { name: "Wine & Gold",       colors: ["#4A0E0E", "#7B1E1E", "#C49E45", "#EBD9A8"] },
+  { name: "Arctic",            colors: ["#E3FDFD", "#CBF1F5", "#A6E3E9", "#71C9CE"] },
+  { name: "Charcoal & Amber",  colors: ["#22223B", "#4A4E69", "#9A8C98", "#F2A65A"] },
+  { name: "Strawberry",        colors: ["#FFF0F3", "#FFCCD5", "#FF8FA3", "#C9184A"] },
+  { name: "Matcha",            colors: ["#283618", "#606C38", "#DDA15E", "#FEFAE0"] },
+  { name: "Indigo Pop",        colors: ["#3D348B", "#7678ED", "#F7B801", "#F18701"] },
+  { name: "Slate Blue",        colors: ["#1B263B", "#415A77", "#778DA9", "#E0E1DD"] },
+  { name: "Peach Cream",       colors: ["#FFCDB2", "#FFB4A2", "#E5989B", "#B5838D"] }
+];
 
 /* ------------------------------------------------------------------ */
 /*  Rendering                                                         */
@@ -1099,8 +1202,42 @@ function renderElements() {
     const types = ["obj", "subject", "text", "logo", "bg"];
     types.forEach(t => { const o = document.createElement("option"); o.value = t; o.textContent = t; if (t === el.type) o.selected = true; typeSel.appendChild(o); });
     if (!types.includes(el.type)) { const o = document.createElement("option"); o.value = el.type; o.textContent = el.type; o.selected = true; typeSel.appendChild(o); }
-    typeSel.addEventListener("change", () => { el.type = typeSel.value; renderJSON(); });
     body.appendChild(typeSel);
+
+    // Font style — typography descriptor, only shown for text/logo elements.
+    const isTextual = t => t === "text" || t === "logo";
+    const fontWrap = document.createElement("div");
+    const fontLabel = document.createElement("label"); fontLabel.textContent = "Font style";
+    fontWrap.appendChild(fontLabel);
+    const fontChips = document.createElement("div"); fontChips.className = "font-presets";
+    const mkFontChip = (label, value, css, weight) => {
+      const c = document.createElement("button");
+      c.type = "button"; c.className = "font-chip"; c.textContent = label;
+      if (css) { c.style.fontFamily = css; if (weight) c.style.fontWeight = weight; }
+      c.title = value || "Let the model choose the typography";
+      if ((el.font || "") === value) c.classList.add("sel");
+      c.addEventListener("click", () => {
+        el.font = value;
+        fontChips.querySelectorAll(".font-chip").forEach(x => x.classList.remove("sel"));
+        c.classList.add("sel");
+        renderJSON();
+      });
+      return c;
+    };
+    fontChips.appendChild(mkFontChip("Default", "", "", ""));
+    FONT_PRESETS.forEach(f => fontChips.appendChild(mkFontChip(f.name, f.prompt, f.css, f.weight)));
+    fontWrap.appendChild(fontChips);
+    fontWrap.style.display = isTextual(el.type) ? "" : "none";
+    if (isTextual(el.type)) ensureFontPreviewCss();
+    body.appendChild(fontWrap);
+
+    typeSel.addEventListener("change", () => {
+      el.type = typeSel.value;
+      const textual = isTextual(el.type);
+      fontWrap.style.display = textual ? "" : "none";
+      if (textual) ensureFontPreviewCss();
+      renderJSON();
+    });
 
     const vecLabel = document.createElement("label"); vecLabel.textContent = "Vectorize";
     body.appendChild(vecLabel);
@@ -1427,12 +1564,11 @@ function buildLayoutJSON() {
       background: state.background,
       // Disabled elements are kept in state (so they can be re-enabled) but
       // excluded from the prompt the model sees and from the JSON output.
-      elements: state.elements.filter(el => el.enabled !== false).map(el => ({
-        type: el.type,
-        bbox: el.bbox.map(n => Math.round(n)),
-        desc: el.desc,
-        color_palette: el.color_palette.slice()
-      }))
+      elements: state.elements.filter(el => el.enabled !== false).map(el => {
+        const o = { type: el.type, bbox: el.bbox.map(n => Math.round(n)), desc: el.desc, color_palette: el.color_palette.slice() };
+        if (el.font) o.font = el.font;
+        return o;
+      })
     }
   };
 }
@@ -1552,6 +1688,7 @@ function loadFromJSON(data) {
       type: e.type || "obj",
       bbox: Array.isArray(e.bbox) && e.bbox.length === 4 ? scaleBoxFromPixels(e.bbox, srcW, srcH) : [100, 100, 500, 500],
       desc: e.desc || "",
+      font: e.font || "",
       color_palette: Array.isArray(e.color_palette) ? e.color_palette.map(normalizeUpper) : [],
       enabled: e.enabled
     })) : []
@@ -1677,6 +1814,45 @@ async function runGeneration() {
 
 
 function setGenStatus(html, cls) { const s = $("genStatus"); s.innerHTML = html; s.className = "status" + (cls ? " " + cls : ""); }
+/* ---- preset palette modal ---- */
+let _selPalette = null;
+function openPaletteModal() {
+  _selPalette = null;
+  renderPaletteGrid();
+  $("paletteApplyStyle").disabled = $("paletteApplyAll").disabled = true;
+  $("paletteStatus").textContent = "";
+  $("paletteOverlay").classList.add("show");
+}
+function closePaletteModal() { $("paletteOverlay").classList.remove("show"); }
+function renderPaletteGrid() {
+  const grid = $("paletteGrid");
+  grid.innerHTML = "";
+  PALETTE_PRESETS.forEach((p, i) => {
+    const card = document.createElement("div");
+    card.className = "pal-card" + (_selPalette === i ? " sel" : "");
+    const strip = document.createElement("div"); strip.className = "pal-strip";
+    p.colors.forEach(c => { const s = document.createElement("span"); s.style.background = c; strip.appendChild(s); });
+    const name = document.createElement("div"); name.className = "pal-name"; name.textContent = p.name;
+    card.append(strip, name);
+    card.addEventListener("click", () => {
+      _selPalette = i;
+      grid.querySelectorAll(".pal-card").forEach(x => x.classList.remove("sel"));
+      card.classList.add("sel");
+      $("paletteApplyStyle").disabled = $("paletteApplyAll").disabled = false;
+      $("paletteStatus").textContent = p.name;
+    });
+    grid.appendChild(card);
+  });
+}
+function applyPresetPalette(clearElements) {
+  if (_selPalette == null) return;
+  state.style_description.color_palette = PALETTE_PRESETS[_selPalette].colors.slice();
+  if (clearElements) state.elements.forEach(e => { e.color_palette = []; });
+  render();
+  closePaletteModal();
+  toast(clearElements ? "Palette applied to the whole image ✓" : "Palette applied to the style ✓", "ok");
+}
+
 function openGenModal() { applyCfgToForm(); setGenStatus("", ""); $("genOverlay").classList.add("show"); $("genPrompt").focus(); }
 function closeGenModal() { $("genOverlay").classList.remove("show"); }
 
@@ -1904,6 +2080,16 @@ $("genRun").addEventListener("click", runGeneration);
 let overlayPressedSelf = false;
 $("genOverlay").addEventListener("mousedown", e => { overlayPressedSelf = (e.target === $("genOverlay")); });
 $("genOverlay").addEventListener("click", e => { if (e.target === $("genOverlay") && overlayPressedSelf) closeGenModal(); });
+
+let _palettePressedSelf = false;
+$("st-palette-presets").addEventListener("click", openPaletteModal);
+$("paletteClose").addEventListener("click", closePaletteModal);
+$("paletteCancel").addEventListener("click", closePaletteModal);
+$("paletteApplyStyle").addEventListener("click", () => applyPresetPalette(false));
+$("paletteApplyAll").addEventListener("click", () => applyPresetPalette(true));
+$("paletteOverlay").addEventListener("mousedown", e => { _palettePressedSelf = (e.target === $("paletteOverlay")); });
+$("paletteOverlay").addEventListener("click", e => { if (e.target === $("paletteOverlay") && _palettePressedSelf) closePaletteModal(); });
+document.addEventListener("keydown", e => { if (e.key === "Escape" && $("paletteOverlay").classList.contains("show")) closePaletteModal(); });
 $("genPrompt").addEventListener("keydown", e => { if ((e.metaKey || e.ctrlKey) && e.key === "Enter") runGeneration(); });
 document.addEventListener("keydown", e => { if (e.key === "Escape" && $("genOverlay").classList.contains("show")) closeGenModal(); });
 
@@ -2835,7 +3021,7 @@ function captureSetup() {
     high_level_description: state.high_level_description,
     style_description: JSON.parse(JSON.stringify(state.style_description)),
     background: state.background,
-    elements: state.elements.map(e => ({ type: e.type, bbox: e.bbox.slice(), desc: e.desc, color_palette: e.color_palette.slice(), vectorize: e.vectorize || "auto", enabled: e.enabled !== false })),
+    elements: state.elements.map(e => ({ type: e.type, bbox: e.bbox.slice(), desc: e.desc, font: e.font || "", color_palette: e.color_palette.slice(), vectorize: e.vectorize || "auto", enabled: e.enabled !== false })),
     comfy,
     render: lastRenderImage ? { ...lastRenderImage } : null
   };
@@ -2892,7 +3078,7 @@ function applySetup(s, beforeImage, beforeRef) {
     elements: Array.isArray(s.elements) ? s.elements.map(e => emptyElement({
       type: e.type || "obj",
       bbox: Array.isArray(e.bbox) && e.bbox.length === 4 ? e.bbox.map(n => clamp(Math.round(+n || 0), 0, COORD)) : [100, 100, 500, 500],
-      desc: e.desc || "", color_palette: Array.isArray(e.color_palette) ? e.color_palette.map(normalizeUpper) : [], vectorize: e.vectorize || "auto", enabled: e.enabled
+      desc: e.desc || "", font: e.font || "", color_palette: Array.isArray(e.color_palette) ? e.color_palette.map(normalizeUpper) : [], vectorize: e.vectorize || "auto", enabled: e.enabled
     })) : []
   };
   if (s.comfy) SETUP_COMFY_KEYS.forEach(k => { if (k in s.comfy) comfyCfg[k] = s.comfy[k]; });

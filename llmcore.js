@@ -95,7 +95,8 @@ Output ONLY a single JSON object (no markdown, no commentary) with EXACTLY this 
         "type": "obj" | "subject" | "text" | "logo" | "bg",
         "bbox": [x1, y1, x2, y2],
         "desc": "what this element is and where it sits",
-        "color_palette": ["#RRGGBB", "..."]
+        "color_palette": ["#RRGGBB", "..."],
+        "font": "OPTIONAL — typography style for text/logo elements only (e.g. 'bold geometric sans-serif lettering'); omit for non-text elements"
       }
     ]
   }
@@ -106,6 +107,7 @@ Rules:
 - Place elements sensibly: titles near the top, taglines/credits near the bottom, the main subject roughly centered. Boxes may overlap when layered (e.g. text over a subject).
 - Use 3 to 6 elements unless the description clearly calls for more. Any text the image should literally show goes in a "text" element with the exact words in its desc (e.g. reading 'NEON TIDE').
 - All colors are uppercase 6-digit hex like "#1A2B3C". Give each element a small palette (1-4 colors) that matches it.
+- For "text" and "logo" elements you MAY add a "font" describing the typography (weight, serif/sans/script/display, era or mood) — e.g. "elegant high-contrast serif lettering". Omit "font" entirely for non-text elements.
 - Be concrete and specific. Return valid JSON only.`;
 
 const IMAGE_SYSTEM_PROMPT = SYSTEM_PROMPT + `
@@ -321,7 +323,9 @@ function buildPromptObj(layout) {
   const elements = (Array.isArray(cd.elements) ? cd.elements : []).map(e => {
     const b = (Array.isArray(e.bbox) && e.bbox.length === 4) ? e.bbox.map(n => Math.round(+n || 0)) : [100, 100, 500, 500];
     const [x1, y1, x2, y2] = b;
-    return { type: e.type || "obj", bbox: [y1, x1, y2, x2], desc: e.desc || "", color_palette: Array.isArray(e.color_palette) ? e.color_palette : [] };
+    const out = { type: e.type || "obj", bbox: [y1, x1, y2, x2], desc: e.desc || "", color_palette: Array.isArray(e.color_palette) ? e.color_palette : [] };
+    if (e.font) out.font = e.font;
+    return out;
   });
   return {
     canvas: { width: d.width, height: d.height, aspect_ratio: info.ratio, orientation: info.orientation },
