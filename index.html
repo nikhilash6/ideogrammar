@@ -649,8 +649,8 @@
         </details>
 
         <div class="btn-row" style="margin-top:14px;">
-          <button id="cf-test">Test connection</button>
-          <button class="primary" id="renderBtn2" style="flex:1;">🎨 Render</button>
+          <button class="has-label" id="cf-test">Test connection</button>
+          <button class="primary has-label" id="renderBtn2" style="flex:1;">🎨 Render</button>
         </div>
         <div class="render-row" style="margin-top:8px;"><span class="status" id="cf-testStatus"></span></div>
         <div class="hint">Renders the current prompt on your ComfyUI server using the bundled Ideogram 4 workflow; the result shows in the middle panel.<br><br><b>Recommended:</b> run <code>comfy_proxy.py</code> on a host that can reach ComfyUI and open this editor from the address it prints (e.g. <code>http://<lan-ip>:8189/</code>). Leave "Connect directly" unchecked — the proxy forwards everything, so there's no CORS. Only tick "Connect directly" if ComfyUI itself runs with <code>--enable-cors-header</code>.</div>

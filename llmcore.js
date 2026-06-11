@@ -383,7 +383,10 @@ function buildWorkflow(layout) {
       const im = node.inputs && node.inputs.images;
       if (Array.isArray(im) && im[0] === NODE.decode) node.inputs.images = [NODE.rtxsr, 0];
     }
-    wf[NODE.rtxsr] = { inputs: { images: [NODE.decode, 0], resize_type: "scale by multiplier", scale: comfyCfg.rtxsr_scale, quality: comfyCfg.rtxsr_quality }, class_type: "RTXVideoSuperResolution", _meta: { title: "RTX Video Super Resolution" } };
+    // resize_type is a V3 dynamic combo: the chosen option's sub-input is
+    // namespaced as "resize_type.scale" (not a bare "scale"), per ComfyUI's
+    // prompt validator.
+    wf[NODE.rtxsr] = { inputs: { images: [NODE.decode, 0], resize_type: "scale by multiplier", "resize_type.scale": comfyCfg.rtxsr_scale, quality: comfyCfg.rtxsr_quality }, class_type: "RTXVideoSuperResolution", _meta: { title: "RTX Video Super Resolution" } };
   }
   return wf;
 }
