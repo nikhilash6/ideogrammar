@@ -13,11 +13,14 @@ Everything lives in [`index.html`](index.html) (HTML + CSS + vanilla JS, no depe
 - **Tiled, draggable workspace** — the main area is a GridStack grid of resizable/draggable windows (Prompt builder, Layout canvas, JSON output, Rendered output). Drag a window by its title bar, resize from the edges; the arrangement is saved per browser. A header picker offers space-maximizing presets — *Sidebar + split* (builder sidebar, canvas + render side by side, JSON strip below), *Three columns*, *Render focus*, and *Quadrants*. GridStack is bundled locally (no CDN), served by the proxy.
 - **Visual layout canvas** — drag/resize bounding boxes on a 1000×1000 grid (origin top-left). Each box is an element with a type, description, and color palette. The canvas reshapes to the selected aspect ratio.
 - **Structured prompt builder** — high-level description, style block (aesthetics, lighting, photo, medium, palette), background, and a reorderable list of elements.
+- **Preset color palettes** — a **🎨 Preset palettes** picker in the Style block opens ~30 curated, colorhunt-style 4-colour sets. Pick one and choose where it lands — just the image's style palette, or the whole image (which also clears per-element colours). Individual swatches stay editable afterwards.
+- **Font-style picker** — `text` and `logo` elements get a typography picker: choose a preset style (each previewed in a matching, self-hosted web font — works fully offline) or type your own descriptor. The chosen style is injected into that element's prompt as a `font` field and round-trips through save/load and LLM refine.
 - **Live JSON output** — syntax-highlighted, copy or download with one click.
 - **Generate prompt** — describe the image in plain language, **or upload/drop a reference image** (with a vision-capable model), and an OpenAI-compatible LLM (OpenRouter or a local `llama.cpp` server) fills in the whole schema. Settings are stored in `localStorage`.
 - **Refine** — ask the LLM to adjust the current setup with a plain-language change (e.g. "make it a lighter composition"); it rewrites the whole setup while keeping everything the request doesn't touch.
 - **ComfyUI mode** — render the current prompt on your ComfyUI server using the bundled Ideogram 4 workflow, with every workflow parameter exposed and the result (plus live progress) shown in the editor. A **✕ Cancel** button interrupts a render in progress. Renders collect in a gallery with a full-size viewer, and can be saved permanently.
 - **LoRA loader** — optionally apply a trained Ideogram 4 LoRA from the UI: tick **Apply LoRA**, pick a file (autocompleted from your ComfyUI's `models/loras/`), and set its strength. It's spliced into the workflow on the fly (model-only) and works with either scheduler; leave it off to render the base model.
+- **RTX Super Resolution** — optionally upscale the render with NVIDIA's `RTXVideoSuperResolution` node before preview/save: tick **RTX Super Resolution** in the ComfyUI parameters, choose a quality preset (LOW–ULTRA) and a 1–4× scale. Spliced in on the fly like the LoRA; needs the `comfyui_nvidia_rtx_nodes` pack and an RTX GPU on the server.
 - **GPU monitor** — live GPU-utilization and VRAM graphs in the top bar (ComfyUI mode), fed by the [Crystools](https://github.com/crystian/ComfyUI-Crystools) websocket; falls back to a VRAM-only graph if Crystools isn't installed.
 - **LLMCam (mobile)** — a phone-first companion page ([`llmcam.html`](llmcam.html)): take a photo and re-render it through Ideogram keeping the composition, with one-tap transforms (faithful, time travel, art style, genre/mood) and Save/Share. See [below](#llmcam-mobile-camera-app).
 - **Import / Reset / Download** — round-trip the prompt JSON.
@@ -45,13 +48,13 @@ A toggle in the header switches between:
   "compositional_deconstruction": {
     "background": "...",
     "elements": [
-      { "type": "obj|subject|text|logo|bg", "bbox": [x1, y1, x2, y2], "desc": "...", "color_palette": ["#RRGGBB"] }
+      { "type": "obj|subject|text|logo|bg", "bbox": [x1, y1, x2, y2], "desc": "...", "color_palette": ["#RRGGBB"], "font": "optional — text/logo only" }
     ]
   }
 }
 ```
 
-Coordinates are a 1000×1000 space, origin top-left, `bbox = [x1, y1, x2, y2]`.
+Coordinates are a 1000×1000 space, origin top-left, `bbox = [x1, y1, x2, y2]`. `font` is optional and only carried for `text`/`logo` elements (a typography descriptor like *"bold geometric sans-serif lettering"*); it's omitted everywhere else.
 
 ## Settings (⚙)
 
@@ -101,6 +104,8 @@ A **setup** is the whole prompt builder state (description, style, background, p
 ComfyUI mode renders the current prompt on your server with the bundled Ideogram 4 workflow ([`workflow.json`](workflow.json), embedded in the page). The left panel exposes every meaningful parameter — connection (proxy vs. direct), scheduler workflow, aspect ratio, megapixels, quality preset (Quality/Default/Turbo), seed (+ randomize), guidance CFG, sampler, CFG-override, batch size, and the diffusion / unconditional / VAE / CLIP model names. The **scheduler workflow** selector switches between the stock *Ideogram 4 default* (`Ideogram4Scheduler`) and a community *simple scheduler* variant (`ModelSamplingAuraFlow` shift + `BasicScheduler` "simple" + euler), which some find gives better results; switching also sets the matching recommended sampler. The editor's prompt JSON is injected into the positive-prompt node on every render. Results and live progress appear in the middle panel, and **✕ Cancel** interrupts a running render (it calls ComfyUI's `/interrupt` and drops the job from the queue). A **Test connection** button reports whether the server is reachable (and its version) or what's wrong.
 
 **LoRA (optional).** In *Advanced parameters* there's an **Apply LoRA** toggle. Enable it, pick a LoRA file (the field autocompletes from the connected server's `models/loras/` once you've run **Test connection**, or just type the filename including any subfolder), and set the **Strength** (1.0 = full effect, lower softens it, negative inverts). When enabled, a `LoraLoaderModelOnly` node is spliced between the diffusion model and its consumer — so it works with both scheduler variants — patching only the conditioned diffusion model; the unconditional/negative model and the text encoder are left untouched (the usual shape for Ideogram 4 diffusion LoRAs). The setting is saved with **setups** like every other render parameter.
+
+**RTX Super Resolution (optional).** Below the LoRA toggle, **RTX Super Resolution** runs NVIDIA's `RTXVideoSuperResolution` node on the decoded image before it reaches Preview/Save — spliced in the same way as the LoRA (it repoints whatever consumes the VAE-decode output, so it works whether you're previewing or saving). Pick a **Quality** preset (LOW / MEDIUM / HIGH / ULTRA) and a **Scale** factor (1–4×, default 2). It needs the [`comfyui_nvidia_rtx_nodes`](https://github.com/nvidia/ComfyUI-nvidia-rtx-nodes) custom-node pack and an RTX GPU on the ComfyUI host; leave it off to output at the rendered resolution. Saved with **setups** like every other render parameter.
 
 The middle panel also reshapes to the selected **aspect ratio** so the layout preview matches the real canvas. You lay boxes out in the editor's normalized `0–1000` space, but when a render is sent the prompt's bounding boxes are scaled into the **actual output pixel dimensions** and the text is prefixed with an explicit **orientation cue** (e.g. *"LANDSCAPE … 1776×1184 … do not rotate or mirror"*). This keeps the model's frame, the latent size, and the layout coordinates consistent — without it the model tends to squash the layout or rotate the result ~90°.
 
@@ -299,7 +304,7 @@ The **Test connection** button in the ComfyUI panel pings `/system_stats` and re
 | [`comfy_proxy.sh`](comfy_proxy.sh) | start/stop/status/restart/logs helper, plus `install-service`/`uninstall-service` to run it as a background systemd service. |
 | [`comfy_proxy.env.example`](comfy_proxy.env.example) | Template for `comfy_proxy.env` (untracked) — set your ComfyUI address/host/port there instead of in the tracked code. |
 | [`workflow.json`](workflow.json) | The Ideogram 4 ComfyUI workflow (API format) the render mode is built around; also embedded in `index.html`. |
-| [`vendor/`](vendor/) | Bundled third-party assets (GridStack JS/CSS) served locally by the proxy, so the tiled layout works without a CDN. |
+| [`vendor/`](vendor/) | Bundled third-party assets served locally by the proxy, so the app works without a CDN: GridStack JS/CSS, and `vendor/fonts/` — a self-hosted latin subset of the font-style preview fonts (woff2 + generated `fonts.css`). |
 
 ## Notes
 
