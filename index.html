@@ -45,14 +45,16 @@
 
   /* ---------- header ---------- */
   header {
-    display: flex; align-items: center; gap: 14px;
-    padding: 12px 18px;
+    display: flex; flex-direction: column; gap: 9px;
+    padding: 10px 18px;
     background: rgba(13,18,26,.7);
     backdrop-filter: blur(8px);
     border-bottom: 1px solid var(--border);
     flex-shrink: 0; z-index: 10;
     margin-bottom:2px;
   }
+  .header-top { display: flex; align-items: center; gap: 12px; }
+  .header-bottom { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
   .brand { display: flex; align-items: center; gap: 10px; }
   .brand .logo {
     width: 28px; height: 28px; border-radius: 5px;
@@ -138,7 +140,19 @@
   button:disabled { opacity: .5; cursor: not-allowed; transform: none; }
   /* gear/symbol glyphs render tiny ("dot"-like) at body size; bump them in buttons */
   .bico { font-size: 1.35em; line-height: 1; vertical-align: -0.09em; }
-  .btn-row { display: flex; gap: 8px; flex-wrap: wrap; }
+  .btn-row { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+  /* compact icon-only buttons in the header action row */
+  .btn-row button, .hlink {
+    width: 34px; height: 32px; padding: 0;
+    display: inline-flex; align-items: center; justify-content: center;
+  }
+  .btn-row svg, .hlink svg { width: 17px; height: 17px; display: block; }
+  .hlink {
+    background: var(--elevated); color: var(--text);
+    border: 1px solid var(--border-strong); border-radius: var(--r-sm);
+    transition: all .14s ease;
+  }
+  .hlink:hover { background: #222c3c; border-color: #3c4b60; transform: translateY(-1px); }
   .iconbtn {
     width: 28px; height: 28px; padding: 0; display: grid; place-items: center;
     background: transparent; border: 1px solid transparent; color: var(--muted); font-size: 13px;
@@ -289,7 +303,9 @@
   body.comfy-mode #gpuMon { display: flex; }
   body.comfy-mode #comfyPanel { display: block; }
   body.comfy-mode #renderResult { display: flex; }
-  body.comfy-mode #renderBtn { display: inline-block; }
+  /* keep comfy-only hide working despite the generic .btn-row button display rule */
+  .btn-row button.comfy-only { display: none; }
+  body.comfy-mode #renderBtn { display: inline-flex; }
   .render-panel { flex-direction: column; align-items: stretch; gap: 10px; width: 100%; flex: 1; min-height: 0; }
   .tile-body.output-body { display: flex; flex-direction: column; }
   .render-img-wrap { position: relative; width: 100%; flex: 1; min-height: 120px; background: var(--panel); border: 1px solid var(--border); border-radius: var(--r); overflow: hidden; display: flex; align-items: center; justify-content: center; box-shadow: var(--shadow), 0 0 0 1px var(--border); }
@@ -360,48 +376,71 @@
 </head>
 <body>
 <header>
-  <div class="brand">
-    <div class="logo">I</div>
-    <h1>Ideogrammar <span>· Ideogram 4 Prompt Editor</span></h1>
+  <div class="header-top">
+    <div class="brand">
+      <div class="logo">I</div>
+      <h1>Ideogrammar <span>· Ideogram 4 Prompt Editor</span></h1>
+    </div>
+    <span class="badge">1000 × 1000 bbox space</span>
+    <div class="spacer"></div>
   </div>
-  <span class="badge">1000 × 1000 bbox space</span>
-  <div class="spacer"></div>
-  <div class="gpu-mon comfy-only" id="gpuMon" title="ComfyUI GPU usage">
-    <div class="gpu-g">
-      <span class="gpu-cap">GPU <b id="gpuUtilPct">—</b></span>
-      <canvas id="gpuUtilSpark" width="64" height="20"></canvas>
+  <div class="header-bottom">
+    <div class="seg" id="modeSeg" title="Manual = copy the JSON yourself · ComfyUI = render it on your server">
+      <button type="button" data-mode="manual">Manual</button>
+      <button type="button" data-mode="comfy">ComfyUI</button>
     </div>
-    <div class="gpu-g">
-      <span class="gpu-cap">VRAM <b id="gpuVramPct">—</b></span>
-      <canvas id="gpuVramSpark" width="64" height="20"></canvas>
+    <div class="btn-row">
+      <button class="primary comfy-only" id="renderBtn" title="Render on your ComfyUI server" aria-label="Render">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>
+      </button>
+      <button class="primary" id="generateBtn" title="Generate prompt" aria-label="Generate prompt">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/><path d="M20 3v4"/><path d="M22 5h-4"/><path d="M4 17v2"/><path d="M5 18H3"/></svg>
+      </button>
+      <button id="refineBtn" title="Ask the model to adjust the current setup" aria-label="Refine">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.64 3.64-1.28-1.28a1.21 1.21 0 0 0-1.72 0L2.36 18.64a1.21 1.21 0 0 0 0 1.72l1.28 1.28a1.2 1.2 0 0 0 1.72 0L21.64 5.36a1.2 1.2 0 0 0 0-1.72Z"/><path d="m14 7 3 3"/><path d="M5 6v4"/><path d="M19 14v4"/><path d="M10 2v2"/><path d="M7 8H3"/><path d="M21 16h-4"/><path d="M11 3H9"/></svg>
+      </button>
+      <button id="importBtn" title="Import JSON" aria-label="Import">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="m8 11 4 4 4-4"/><path d="M8 5H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-4"/></svg>
+      </button>
+      <button id="resetBtn" title="Reset to the default example" aria-label="Reset">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+      </button>
+      <button id="copyBtn" title="Copy JSON" aria-label="Copy JSON">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+      </button>
+      <button id="downloadBtn" title="Download JSON" aria-label="Download">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
+      </button>
+      <button id="settingsBtn" title="Settings" aria-label="Settings">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
+      </button>
+      <a href="llmcam.html" class="hlink" title="Open the phone camera app" aria-label="LLMCam">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg>
+      </a>
     </div>
-    <div class="gpu-g">
-      <span class="gpu-cap">CPU <b id="cpuPct">—</b></span>
-      <canvas id="cpuSpark" width="64" height="20"></canvas>
+    <div class="spacer"></div>
+    <div class="gpu-mon comfy-only" id="gpuMon" title="ComfyUI GPU usage">
+      <div class="gpu-g">
+        <span class="gpu-cap">GPU <b id="gpuUtilPct">—</b></span>
+        <canvas id="gpuUtilSpark" width="64" height="20"></canvas>
+      </div>
+      <div class="gpu-g">
+        <span class="gpu-cap">VRAM <b id="gpuVramPct">—</b></span>
+        <canvas id="gpuVramSpark" width="64" height="20"></canvas>
+      </div>
+      <div class="gpu-g">
+        <span class="gpu-cap">CPU <b id="cpuPct">—</b></span>
+        <canvas id="cpuSpark" width="64" height="20"></canvas>
+      </div>
+      <div class="gpu-g">
+        <span class="gpu-cap">RAM <b id="ramPct">—</b></span>
+        <canvas id="ramSpark" width="64" height="20"></canvas>
+      </div>
+      <div class="gpu-g">
+        <span class="gpu-cap">TEMP <b id="gpuTemp">—</b></span>
+        <canvas id="gpuTempSpark" width="64" height="20"></canvas>
+      </div>
     </div>
-    <div class="gpu-g">
-      <span class="gpu-cap">RAM <b id="ramPct">—</b></span>
-      <canvas id="ramSpark" width="64" height="20"></canvas>
-    </div>
-    <div class="gpu-g">
-      <span class="gpu-cap">TEMP <b id="gpuTemp">—</b></span>
-      <canvas id="gpuTempSpark" width="64" height="20"></canvas>
-    </div>
-  </div>
-  <div class="seg" id="modeSeg" title="Manual = copy the JSON yourself · ComfyUI = render it on your server">
-    <button type="button" data-mode="manual">Manual</button>
-    <button type="button" data-mode="comfy">ComfyUI</button>
-  </div>
-  <div class="btn-row">
-    <button class="primary comfy-only" id="renderBtn">🎨 Render</button>
-    <button class="primary" id="generateBtn">✨ Generate prompt</button>
-    <button id="refineBtn" title="Ask the model to adjust the current setup">🪄 Refine</button>
-    <button id="importBtn">Import</button>
-    <button id="resetBtn">Reset</button>
-    <button id="copyBtn">Copy JSON</button>
-    <button id="downloadBtn">Download</button>
-    <button id="settingsBtn" title="Settings"><span class="bico">⚙</span> Settings</button>
-    <a href="llmcam.html" title="Open the phone camera app" style="text-decoration:none; display:inline-flex; align-items:center; background:var(--elevated); color:var(--text); border:1px solid var(--border-strong); border-radius:var(--r-sm); padding:8px 13px; font-size:13px; font-weight:500;">📷 LLMCam</a>
     <select id="layoutPreset" title="Tiling preset" style="width:auto; padding:7px 10px;">
       <option value="sidebar">▤ Sidebar + split</option>
       <option value="columns">▥ Three columns</option>
