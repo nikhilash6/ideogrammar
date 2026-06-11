@@ -1029,7 +1029,7 @@ function ensureFontPreviewCss() {
   _fontPreviewLoaded = true;
   const l = document.createElement("link");
   l.rel = "stylesheet";
-  l.href = "https://fonts.googleapis.com/css2?family=Montserrat:wght@800&family=Inter:wght@600&family=Playfair+Display:wght@700&family=Lora:wght@600&family=Roboto+Slab:wght@700&family=Poiret+One&family=Righteous&family=Great+Vibes&family=Caveat:wght@700&family=Permanent+Marker&family=Space+Mono:wght@700&family=Orbitron:wght@700&family=Bangers&family=Rye&display=swap";
+  l.href = "vendor/fonts/fonts.css";   // self-hosted (latin subset) — works fully offline
   document.head.appendChild(l);
 }
 
@@ -1210,23 +1210,36 @@ function renderElements() {
     const fontLabel = document.createElement("label"); fontLabel.textContent = "Font style";
     fontWrap.appendChild(fontLabel);
     const fontChips = document.createElement("div"); fontChips.className = "font-presets";
+    const fontCustom = document.createElement("input");
+    // Highlight whichever chip matches the current descriptor (the custom box is
+    // the source of truth; chips are just shortcuts that fill it).
+    const syncFontChips = () => {
+      fontChips.querySelectorAll(".font-chip").forEach(x => x.classList.toggle("sel", (x.dataset.val || "") === (el.font || "")));
+    };
     const mkFontChip = (label, value, css, weight) => {
       const c = document.createElement("button");
       c.type = "button"; c.className = "font-chip"; c.textContent = label;
+      c.dataset.val = value;
       if (css) { c.style.fontFamily = css; if (weight) c.style.fontWeight = weight; }
       c.title = value || "Let the model choose the typography";
-      if ((el.font || "") === value) c.classList.add("sel");
       c.addEventListener("click", () => {
-        el.font = value;
-        fontChips.querySelectorAll(".font-chip").forEach(x => x.classList.remove("sel"));
-        c.classList.add("sel");
-        renderJSON();
+        el.font = value; fontCustom.value = value; syncFontChips(); renderJSON();
       });
       return c;
     };
     fontChips.appendChild(mkFontChip("Default", "", "", ""));
     FONT_PRESETS.forEach(f => fontChips.appendChild(mkFontChip(f.name, f.prompt, f.css, f.weight)));
     fontWrap.appendChild(fontChips);
+
+    fontCustom.type = "text";
+    fontCustom.placeholder = "or describe your own font style…";
+    fontCustom.value = el.font || "";
+    fontCustom.style.marginTop = "7px";
+    fontCustom.addEventListener("keydown", e => e.stopPropagation());
+    fontCustom.addEventListener("input", () => { el.font = fontCustom.value; syncFontChips(); renderJSON(); });
+    fontWrap.appendChild(fontCustom);
+
+    syncFontChips();
     fontWrap.style.display = isTextual(el.type) ? "" : "none";
     if (isTextual(el.type)) ensureFontPreviewCss();
     body.appendChild(fontWrap);
