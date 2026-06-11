@@ -181,7 +181,7 @@ const WORKFLOW_TEMPLATE = {
   "98:156": { inputs: { choice: "Turbo", index: 2, option1: "Quality", option2: "Default", option3: "Turbo", option4: "" }, class_type: "CustomCombo", _meta: { title: "Custom Combo" } },
   "98:157": { inputs: { cfg: 3, start_percent: 0.9, end_percent: 1, model: ["98:23", 0] }, class_type: "CFGOverride", _meta: { title: "CFG Override" } }
 };
-const NODE = { resolution: "37", seed: "98:18", preset: "98:156", guider: "98:155", cfgOverride: "98:157", sampler: "98:16", prompt: "98:24", clip: "98:14", diffModel: "98:23", uncondModel: "98:154", vae: "98:9", latent: "98:11", lora: "98:300" };
+const NODE = { resolution: "37", seed: "98:18", preset: "98:156", guider: "98:155", cfgOverride: "98:157", sampler: "98:16", prompt: "98:24", clip: "98:14", diffModel: "98:23", uncondModel: "98:154", vae: "98:9", latent: "98:11", lora: "98:300", decode: "98:13", rtxsr: "98:400" };
 const PRESET_INDEX = { Quality: 0, Default: 1, Turbo: 2 };
 // Alternative scheduler setup (community "simple scheduler" tweak): insert
 // ModelSamplingAuraFlow (shift) after the diffusion model, replace the
@@ -211,6 +211,7 @@ function defaultComfyCfg() {
     diff_model: "ideogram4_fp8_scaled.safetensors",
     uncond_model: "ideogram4_unconditional_fp8_scaled.safetensors",
     lora_enabled: false, lora_name: "", lora_strength: 1,
+    rtxsr_enabled: false, rtxsr_quality: "ULTRA", rtxsr_scale: 2,
     vae_name: "flux2-vae.safetensors",
     clip_name: "qwen3vl_8b_fp8_scaled.safetensors", clip_type: "ideogram4",
     batch_size: 1
@@ -267,6 +268,7 @@ function sanitizeComfyCfg() {
   comfyCfg.end_percent   = numInRange(comfyCfg.end_percent, 0, 1, 1);
   comfyCfg.batch_size   = Math.round(numInRange(comfyCfg.batch_size, 1, 64, 1));
   comfyCfg.lora_strength = numInRange(comfyCfg.lora_strength, -10, 10, 1);
+  comfyCfg.rtxsr_scale   = numInRange(comfyCfg.rtxsr_scale, 1, 4, 2);
 }
 
 function getClientId() {
@@ -371,6 +373,18 @@ function buildWorkflow(layout) {
     wf[NODE.lora] = { inputs: { lora_name: comfyCfg.lora_name, strength_model: comfyCfg.lora_strength, model: [NODE.diffModel, 0] }, class_type: "LoraLoaderModelOnly", _meta: { title: "Load LoRA (Model Only)" } };
   }
   if (comfyCfg.save) wf["25"] = { inputs: { images: ["98:13", 0], filename_prefix: "ideogrammar" }, class_type: "SaveImage", _meta: { title: "Save Image" } };
+  // Optional NVIDIA RTX Video Super Resolution: splice an upscaler between the
+  // VAE decode and whatever consumes its image (Preview/Save). Same shape as the
+  // LoRA splice — repoint existing consumers of the decode output to the new
+  // node, then feed the decode into it. resize_type is the node's dynamic combo;
+  // we use "scale by multiplier" with the chosen factor and quality.
+  if (comfyCfg.rtxsr_enabled) {
+    for (const node of Object.values(wf)) {
+      const im = node.inputs && node.inputs.images;
+      if (Array.isArray(im) && im[0] === NODE.decode) node.inputs.images = [NODE.rtxsr, 0];
+    }
+    wf[NODE.rtxsr] = { inputs: { images: [NODE.decode, 0], resize_type: "scale by multiplier", scale: comfyCfg.rtxsr_scale, quality: comfyCfg.rtxsr_quality }, class_type: "RTXVideoSuperResolution", _meta: { title: "RTX Video Super Resolution" } };
+  }
   return wf;
 }
 

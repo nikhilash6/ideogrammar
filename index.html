@@ -625,6 +625,20 @@
               <div><label>Strength</label><input type="number" id="cf-lora-strength" step="0.05" min="-10" max="10" style="width:6.5em;" title="LoRA model strength. 1.0 = full effect; lower softens it, negative inverts."></div>
             </div>
             <div class="hint">Loads a LoRA from ComfyUI's <code>models/loras/</code> (the name is the filename, including subfolders). The list autocompletes once you've tested the connection. Only the main diffusion model is patched (model-only); the text encoder and unconditional model are untouched. Leave unchecked to render the base model.</div>
+            <label class="toggle" style="margin-top:12px;"><input type="checkbox" id="cf-rtxsr-enabled"> RTX Super Resolution <span style="color:var(--faint)">(NVIDIA upscale after decode)</span></label>
+            <div class="row2" id="cf-rtxsr-row" style="grid-template-columns:1fr auto;">
+              <div>
+                <label>Quality</label>
+                <select id="cf-rtxsr-quality" title="RTX VSR quality preset. ULTRA is sharpest but slowest.">
+                  <option value="LOW">LOW</option>
+                  <option value="MEDIUM">MEDIUM</option>
+                  <option value="HIGH">HIGH</option>
+                  <option value="ULTRA">ULTRA</option>
+                </select>
+              </div>
+              <div><label>Scale ×</label><input type="number" id="cf-rtxsr-scale" step="0.25" min="1" max="4" style="width:6.5em;" title="Output scale factor (1–4×). 2 = double the rendered size."></div>
+            </div>
+            <div class="hint">Runs NVIDIA's <code>RTXVideoSuperResolution</code> node on the decoded image before preview/save, scaling it up by the chosen factor. Requires the <code>comfyui_nvidia_rtx_nodes</code> pack and an RTX GPU on the ComfyUI server. Leave unchecked to output at the rendered resolution.</div>
             <label>VAE</label>
             <input type="text" id="cf-vae">
             <label>CLIP</label>
@@ -2177,6 +2191,11 @@ function syncLoraFields() {
   $("cf-lora-row").style.opacity = on ? "" : "0.5";
   $("cf-lora-name").disabled = $("cf-lora-strength").disabled = !on;
 }
+function syncRtxsrFields() {
+  const on = $("cf-rtxsr-enabled").checked;
+  $("cf-rtxsr-row").style.opacity = on ? "" : "0.5";
+  $("cf-rtxsr-quality").disabled = $("cf-rtxsr-scale").disabled = !on;
+}
 // Populate the LoRA autocomplete list from the installed ComfyUI's node defs.
 async function populateLoraList() {
   const base = comfyBase();
@@ -2211,6 +2230,10 @@ function applyComfyForm() {
   $("cf-lora-name").value = comfyCfg.lora_name;
   $("cf-lora-strength").value = comfyCfg.lora_strength;
   syncLoraFields();
+  $("cf-rtxsr-enabled").checked = comfyCfg.rtxsr_enabled;
+  $("cf-rtxsr-quality").value = comfyCfg.rtxsr_quality;
+  $("cf-rtxsr-scale").value = comfyCfg.rtxsr_scale;
+  syncRtxsrFields();
   $("cf-vae").value = comfyCfg.vae_name;
   $("cf-clip").value = comfyCfg.clip_name;
   $("cf-cliptype").value = comfyCfg.clip_type;
@@ -2236,6 +2259,9 @@ function readComfyForm() {
   comfyCfg.lora_enabled = $("cf-lora-enabled").checked;
   comfyCfg.lora_name = $("cf-lora-name").value.trim();
   comfyCfg.lora_strength = parseFloat($("cf-lora-strength").value);
+  comfyCfg.rtxsr_enabled = $("cf-rtxsr-enabled").checked;
+  comfyCfg.rtxsr_quality = $("cf-rtxsr-quality").value;
+  comfyCfg.rtxsr_scale = parseFloat($("cf-rtxsr-scale").value);
   comfyCfg.vae_name = $("cf-vae").value.trim();
   comfyCfg.clip_name = $("cf-clip").value.trim();
   comfyCfg.clip_type = $("cf-cliptype").value.trim();
@@ -2801,7 +2827,7 @@ function refreshSetupList() {
   const sel = $("setupSel"), s = loadSetups();
   sel.innerHTML = '<option value="">— select —</option>' + s.map((x, i) => `<option value="${i}">${escapeHtml(x.name)}</option>`).join("");
 }
-const SETUP_COMFY_KEYS = ["workflow", "aspect_ratio", "megapixels", "preset", "cfg", "sampler_name", "cfg_override", "start_percent", "end_percent", "batch_size", "diff_model", "uncond_model", "lora_enabled", "lora_name", "lora_strength", "vae_name", "clip_name", "clip_type", "save"];
+const SETUP_COMFY_KEYS = ["workflow", "aspect_ratio", "megapixels", "preset", "cfg", "sampler_name", "cfg_override", "start_percent", "end_percent", "batch_size", "diff_model", "uncond_model", "lora_enabled", "lora_name", "lora_strength", "rtxsr_enabled", "rtxsr_quality", "rtxsr_scale", "vae_name", "clip_name", "clip_type", "save"];
 function captureSetup() {
   const comfy = {};
   SETUP_COMFY_KEYS.forEach(k => comfy[k] = comfyCfg[k]);
@@ -3106,10 +3132,11 @@ $("renderBtn").addEventListener("click", comfyRender);
 $("renderBtn2").addEventListener("click", comfyRender);
 $("renderCancel").addEventListener("click", cancelRender);
 $("cf-rerollSeed").addEventListener("click", () => { comfyCfg.seed = randomSeed(); $("cf-seed").value = comfyCfg.seed; saveComfyCfg(); });
-["cf-url", "cf-save", "cf-aspect", "cf-megapixels", "cf-preset", "cf-seed", "cf-randomize", "cf-cfg", "cf-sampler", "cf-cfgo", "cf-start", "cf-end", "cf-diff", "cf-uncond", "cf-lora-name", "cf-lora-strength", "cf-vae", "cf-clip", "cf-cliptype", "cf-batch"].forEach(id => {
+["cf-url", "cf-save", "cf-aspect", "cf-megapixels", "cf-preset", "cf-seed", "cf-randomize", "cf-cfg", "cf-sampler", "cf-cfgo", "cf-start", "cf-end", "cf-diff", "cf-uncond", "cf-lora-name", "cf-lora-strength", "cf-rtxsr-quality", "cf-rtxsr-scale", "cf-vae", "cf-clip", "cf-cliptype", "cf-batch"].forEach(id => {
   const e = $(id); if (e) e.addEventListener("change", readComfyForm);
 });
 $("cf-lora-enabled").addEventListener("change", () => { readComfyForm(); syncLoraFields(); });
+$("cf-rtxsr-enabled").addEventListener("change", () => { readComfyForm(); syncRtxsrFields(); });
 
 setupGrid();
 sanitizeComfyCfg();
